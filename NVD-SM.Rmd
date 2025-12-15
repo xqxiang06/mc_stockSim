@@ -1,0 +1,402 @@
+---
+title: "NVD stock 2018-2024"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    code_folding: show
+---
+
+## data prep
+```{r}
+library(dplyr)
+library(readr)
+
+# Read CSV
+nvidia <- read_csv("NVIDIA_STOCK.csv", col_names = FALSE)
+
+# Use FIRST ROW as proper column names (Price, Adj Close, Close...)
+colnames(nvidia) <- as.character(unlist(nvidia[1, ]))
+
+# Remove the first THREE rows
+df <- nvidia[-c(1, 2, 3), ]
+
+# Rename the first column "Price" → "Date"
+df <- df %>%
+  rename(Date = Price)
+
+# Convert types
+df <- df %>%
+  mutate(
+    Date = as.Date(Date),
+    `Adj Close` = as.numeric(`Adj Close`),
+    Close = as.numeric(Close),
+    High = as.numeric(High),
+    Low = as.numeric(Low),
+    Open = as.numeric(Open),
+    Volume = as.numeric(Volume)
+  )
+
+# Check
+tail(df)
+str(df)
+# write the clean data to a new .csv file
+write_csv(df, "NVIDIA_STOCK_CLEAN.csv")
+```
+
+## Close Price Over Time
+```{r}
+library(ggplot2)
+
+ggplot(df, aes(x = Date, y = `Adj Close`)) +
+  geom_line(color = "#0073C2FF", size = 1) +
+  labs(title = "NVIDIA Adjusted Close Price Over Time",
+       x = "Date",
+       y = "AdjClose Price (USD)")
+
+```
+
+1. Close Price Over Time
+
+Interpretation
+
+NVIDIA's stock price demonstrates remarkable growth over the 6-year period, transforming from approximately $5-10 in 2018 to peaks exceeding $130 by late 2024. The trajectory reveals four distinct phases:
+
+- Phase 1 (2018-2020): Steady Foundation - The stock traded relatively flat between $5-15, showing modest growth with minimal volatility. This period reflects NVIDIA's transition from primarily a gaming GPU company to diversifying into data centers.
+
+- Phase 2 (2020-2021): Cryptocurrency Surge - A sharp rally from ~$10 to $35 occurred, driven by the cryptocurrency mining boom which created massive demand for NVIDIA's GPUs. The stock peaked around $35 in late 2021.
+
+- Phase 3 (2022-early 2023): Correction Period - A significant pullback to ~$10-15 reflects the crypto market crash, global chip shortage concerns, and broader market correction during the Federal Reserve's interest rate hiking cycle.
+
+- Phase 4 (2023-2024): AI Revolution Explosion - The most dramatic growth phase, where the stock surged from $15 to over $130 (approximately 8-9x increase). This unprecedented rally was fueled by the generative AI boom following ChatGPT's launch.
+
+Key Events Correlation
+
+2018-2019
+- September 2018: RTX 20-series launch (first ray-tracing GPUs) - modest price impact
+- Crypto mining bubble burst led to GPU oversupply and price stagnation
+
+2020
+- May 2020: Mellanox acquisition completed ($7 billion) - strengthened data center position
+- September 2020: RTX 30-series "Ampere" launch - significant performance leap
+- Stock began steady climb as data center revenue grew
+
+2021
+- Q1 2021: Data center revenue surpassed gaming for first time
+September 2021: Grace CPU announcement - expansion beyond GPUs
+Cryptocurrency mining demand drove stock to $35 peak
+Stock split 4-for-1 in July 2021 (adjusted in data)
+
+2022
+- Crypto crash throughout 2022 caused sharp decline
+- September 2022: RTX 40-series launch, but demand was soft
+- US export restrictions on advanced AI chips to China announced (October)
+- Stock hit bottom around $10-12
+
+2023: The AI Transformation Year
+- November 2022-March 2023: ChatGPT launches, sparking generative AI race
+- May 2023: Blockbuster Q1 earnings - data center revenue doubled
+- Stock began meteoric rise from $25 to $50+ by mid-2023
+- Every major tech company (Microsoft, Google, Meta, Amazon) announced massive AI infrastructure investments using NVIDIA GPUs
+
+2024
+- March 2024: GTC Conference - announced Blackwell GPU architecture
+- Stock reached all-time highs above $130
+- NVIDIA briefly became the world's most valuable company (June 2024)
+- 10-for-1 stock split in June 2024 (adjusted in data)
+- Continued volatility but sustained high valuation driven by H100/H200 GPU demand
+
+
+## Trading Volume
+```{r}
+
+ggplot(df, aes(x = Date, y = Volume)) +
+  geom_col(fill = "#FF8C00", width = 1) +
+  labs(
+    title = "NVIDIA Trading Volume Over Time",
+    x = "Date",
+    y = "Volume (Shares Traded)"
+  )
+
+
+library(lubridate)
+df_monthly <- df %>%
+  group_by(YearMonth = floor_date(Date, "month")) %>%
+  summarise(Volume = sum(Volume))
+
+ggplot(df_monthly, aes(x = YearMonth, y = Volume)) +
+  geom_col(fill = "#FF8C00") +
+  labs(title = "NVIDIA Monthly Trading Volume",
+       x = "Month",
+       y = "Volume")
+
+```
+
+2. Monthly Trading Volume
+
+Interpretation
+
+Trading volume shows significant variability throughout the period, with clear spikes corresponding to major market events and earnings announcements. Volume patterns reveal investor sentiment and market activity intensity.
+
+Key Volume Patterns:
+
+- 2018: Moderate baseline volume (10-15 billion shares monthly)
+- Early 2019: Extremely high volume spikes (~17 billion) during crypto bust uncertainty
+- 2020: Elevated volume during COVID-19 market volatility and recovery
+- 2021: High sustained volume during crypto bull run
+- 2022: Reduced volume during bear market (5-10 billion range)
+- 2023-2024: Moderate to high volume as AI narrative developed
+
+Volume Event Correlation
+
+High Volume Spikes Indicate:
+
+- Earnings announcements (quarterly pattern visible)
+- Major product launches
+- Significant news events (acquisitions, restrictions, breakthroughs)
+- Market regime changes (bull to bear transitions)
+
+Notable Volume Events:
+
+- Early 2019: Massive volume during crypto aftermath and gaming GPU glut
+- March 2020: COVID-19 crash caused volume spike as investors repositioned
+- May 2023: Record volume after stunning AI-driven earnings beat
+- Mid-2024: Sustained high volume as institutional investors piled into AI trade
+
+Volume typically spikes 1-2 days around earnings dates (typically late February, late May, late August, late November each year).
+
+## Dynamic Candlestick Chart
+```{r}
+library(plotly)
+plot_ly(data = df, x = ~Date, type = "candlestick",
+        open = ~Open, close = ~Close,
+        high = ~High, low = ~Low) %>%
+  layout(title = "NVIDIA Candlestick Chart",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Price (USD)"))
+```
+
+3. Candlestick Chart
+
+Interpretation
+
+The candlestick chart provides granular insight into daily price action, revealing buying/selling pressure through the relationship between opening, closing, high, and low prices.
+
+Pattern Analysis:
+
+- 2018-2020: Narrow Trading Range
+
+Small candlestick bodies indicate low daily volatility
+Prices consolidated as company transitioned business model
+Red (down) and green (up) days relatively balanced
+
+- 2021: Crypto Bull Run
+
+Larger green candles show strong buying pressure
+Upper wicks indicate resistance at higher levels
+Steady uptrend with pullbacks
+
+- 2022: Bear Market
+
+Dominant red candles during downtrend
+Long lower wicks show intraday selling pressure
+Gap-down days following negative news
+
+- 2023-2024: AI Boom
+
+Massive green candles post-earnings (particularly May 2023)
+Increased candle body sizes reflect higher daily price swings
+Strong uptrend with occasional violent selloffs (volatility expansion)
+Upper and lower wicks lengthened, showing increased intraday trading ranges
+
+Technical Signals:
+
+- Long green candles with small wicks = strong bullish momentum (2023-2024)
+- Doji candles (small bodies, long wicks) = market indecision (visible in 2022)
+- Gap ups after earnings = extremely positive market reaction (May 2023, several 2024 dates)
+
+
+## Cumulative Return
+```{r}
+library(tidyr)
+# Calculate the daily rate of return
+# Return_t = Close_t / Close_(t-1) - 1
+df <- df %>%
+  arrange(Date) %>%
+  mutate(Return = Close / lag(Close) - 1)
+
+# Calculate the cumulative earnings
+# Cumulative_Return_t = Π (1 + Return_i)
+df <- df %>%
+  mutate(Cumulative_Return = cumprod(1 + replace_na(Return, 0)))
+
+# Plot
+ggplot(df, aes(x = Date, y = Cumulative_Return)) +
+  geom_line(color = "brown", size = 1) +
+  labs(
+    title = "NVIDIA Cumulative Return Over Time",
+    x = "Date",
+    y = "Cumulative Return (Growth Factor)"
+  )
+
+```
+
+4. Cumulative Return Over Time
+
+Interpretation
+
+The cumulative return chart dramatically illustrates NVIDIA's extraordinary performance as an investment, with a growth factor exceeding 25x from 2018 baseline.
+Return Analysis:
+
+Growth Phases:
+
+- 2018-2020: Cumulative return ~1-2x (minimal growth, basically flat)
+- 2020-2021: Grew to ~7-8x (cryptocurrency and pandemic tech surge)
+- 2022: Declined to ~4-5x (significant drawdown during bear market)
+- 2023-2024: Exploded to ~25-27x (AI-driven growth)
+
+Key Insights:
+
+An investor who bought $10,000 of NVIDIA stock in early 2018 would have ~$250,000+ by late 2024
+The 2022 drawdown of ~50% from peaks tested investor conviction
+The recovery and new highs in 2023-2024 rewarded long-term holders
+NVIDIA dramatically outperformed the S&P 500 (see comparison chart)
+
+Risk-Adjusted Perspective:
+
+While returns are spectacular, the journey included a 50%+ drawdown in 2022, highlighting the volatility risk investors faced. The crypto boom-bust cycle and subsequent AI boom show NVIDIA's dependency on emerging technology trends.
+
+
+## 30-Day Rolling Volatility
+
+Volatility: sd of the daily yield over the past N days
+\[
+\sigma_{30}(t) 
+= \sqrt{\frac{1}{30} \sum_{i=0}^{29} \left( r_{t-i} - \bar{r}_{30}(t) \right)^2 }
+\]
+
+```{r}
+library(zoo)
+
+# Rolling 30-day Volatility）
+
+df <- df %>%
+  mutate(
+    Volatility30 = rollapply(Return, width = 30, FUN = sd, fill = NA, align = "right")
+  ) # "Return" is the daily rate of return from last part
+
+# plot
+ggplot(df, aes(x = Date, y = Volatility30)) +
+  geom_line(color = "darkgreen", size = 1) +
+  labs(
+    title = "30-Day Rolling Volatility of NVIDIA",
+    x = "Date",
+    y = "Volatility (Std Dev of Daily Returns)"
+  )
+
+```
+
+5. 30-Day Rolling Volatility
+
+Interpretation
+
+Volatility measures the standard deviation of daily returns, indicating price uncertainty and risk. Higher volatility periods correspond to uncertain market conditions or major news events.
+
+Volatility Regime Analysis:
+
+- 2020 COVID Crash: Highest volatility spike in entire dataset (~0.08) as markets faced unprecedented uncertainty
+- 2022 Crypto Crash: Elevated volatility (~0.04-0.05) as NVIDIA navigated GPU oversupply and demand destruction
+- 2023 AI Rally: Surprisingly moderate volatility given rapid price appreciation, suggesting strong institutional conviction
+
+Investment Implications:
+
+- High volatility periods offered entry opportunities for risk-tolerant investors
+- Volatility tends to cluster (volatile periods followed by more volatility)
+- Low volatility during 2023-2024 rally suggests strong conviction in AI narrative
+- Options traders would have found rich premiums during 2020 and 2022 spikes
+
+
+## Comparison with S&P500
+```{r}
+library(quantmod)
+
+# Get S&P 500 data from Yahoo Finance (also the default source)
+getSymbols("^GSPC", src = "yahoo", from = "2018-01-01", to = "2024-12-31")
+head(GSPC)
+
+# Convert to regular data frame
+sp500 <- data.frame(Date = index(GSPC), coredata(GSPC))
+
+# Rename columns to match your df style
+colnames(sp500) <- c("Date", "Open", "High", "Low", "Close", "Volume", "Adjusted")
+
+sp500 <- sp500 %>%
+  arrange(Date) %>%
+  mutate(Return = Close / lag(Close) - 1)
+
+```
+
+```{r}
+
+sp500 <- sp500 %>%
+  mutate(Cumulative_Return = cumprod(1 + ifelse(is.na(Return), 0, Return)))
+
+
+# Merge by date
+compare_df <- df %>%
+  select(Date, NVDA_Close = Close, NVDA_Cum = Cumulative_Return) %>%
+  inner_join(
+    sp500 %>% select(Date, SP500_Close = Close, SP500_Cum = Cumulative_Return),
+    by = "Date"
+  )
+
+# Plot cumulative return comparison
+ggplot(compare_df, aes(x = Date)) +
+  geom_line(aes(y = NVDA_Cum, color = "NVIDIA"), size = 1.1) +
+  geom_line(aes(y = SP500_Cum, color = "S&P 500"), size = 1.1) +
+  scale_color_manual(values = c("NVIDIA" = "#E74C3C", "S&P 500" = "skyblue")) +
+  labs(title = "Cumulative Return: NVIDIA vs S&P 500",
+       x = "Date",
+       y = "Cumulative Return (Growth Factor)",
+       color = "Legend")
+```
+
+6. Cumulative Return: NVIDIA vs S&P 500
+
+Interpretation
+
+This comparison chart starkly illustrates NVIDIA's massive outperformance versus the broader market, demonstrating both the company's exceptional growth and its higher risk profile.
+
+Performance Comparison:
+- NVIDIA: ~25x cumulative return (2,500% gain)
+- S&P 500: ~2x cumulative return (~100% gain)
+- Outperformance Ratio: NVIDIA returned approximately 12-13x more than the S&P 500 over this period.
+
+Key Observations:
+
+- 2018-2020: Both assets moved relatively similarly, with NVIDIA showing slightly more volatility but comparable returns. This period shows NVIDIA trading more like a "normal" tech stock.
+- 2020-2021: NVIDIA began separating from S&P 500, driven by crypto demand and data center growth. The gap widened from 2x to ~3x outperformance.
+- 2022 Correction: NVIDIA fell more sharply than S&P 500 (higher beta), demonstrating the downside of volatility. While S&P 500 declined modestly, NVIDIA gave back much of its gains, highlighting sector-specific risks (crypto crash, chip restrictions).
+- 2023-2024 Divergence: The performance gap exploded dramatically. While S&P 500 gained steadily (~20-30% total), NVIDIA skyrocketed 400-500% during the same period. This reflects:
+
+NVIDIA's unique positioning as the "picks and shovels" provider of the AI revolution
+Virtually monopolistic position in AI training chips (90%+ market share)
+Every major tech company competing to secure NVIDIA GPU supply
+
+Risk-Return Profile:
+
+- Beta Analysis: NVIDIA exhibits much higher beta (systematic risk) than market
+- Correlation: Strong correlation during calm periods, divergence during sector-specific events
+Diversification: NVIDIA's returns show it's not just a tech stock but a specialized AI infrastructure play
+
+Investment Lesson:
+
+While NVIDIA dramatically outperformed, investors had to endure:
+
+- 50%+ drawdown in 2022
+- Extreme day-to-day volatility
+- Concentration risk (single stock vs. diversified index)
+- Sector rotation risk (gaming → crypto → AI)
+
+The S&P 500's steady, less volatile growth represents the value of diversification, even if absolute returns were much lower.
