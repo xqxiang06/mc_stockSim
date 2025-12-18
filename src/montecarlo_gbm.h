@@ -2,8 +2,8 @@
 #define MONTECARLO_GBM_H
 
 #include <vector>
-#include <random>
 #include <cmath>
+#include <utility>
 
 /*
 Monte Carlo Simulation for Stock Prices using Geometric Brownian Motion
@@ -21,7 +21,7 @@ class MonteCarloGBM {
     // Get results
     const std::vector<std::vector<double>>& getPaths() const { return paths; }
     const std::vector<double>& getTimeGrid() const { return time_grid; }
-    std::vector<double> getFinalPrices() const;
+    const std::vector<double>& getFinalPrices() const;
     
     // Statistical analysis
     double getMeanFinalPrice() const;
@@ -46,12 +46,9 @@ private:
     int n_paths;      // Number of simulation paths
     
     // Simulation results
-    std::vector<std::vector<double>> paths;  // paths[step][time]
+    std::vector<std::vector<double>> paths;  // paths[path][step]
     std::vector<double> time_grid;           // time points
-    
-    // Random number generation
-    std::mt19937 rng;
-    std::normal_distribution<double> normal_dist;
+    std::vector<double> final_prices;
     
     // Helper functions
     void generateTimeGrid();

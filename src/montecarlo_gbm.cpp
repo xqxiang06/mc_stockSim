@@ -14,16 +14,11 @@
 
 MonteCarloGBM::MonteCarloGBM(double S0, double mu, double sigma,
                              double T, int n_steps, int n_paths)
-    : S0(S0), mu(mu), sigma(sigma), T(T), n_steps(n_steps), n_paths(n_paths),
-      normal_dist(0.0, 1.0)
+    : S0(S0), mu(mu), sigma(sigma), T(T), n_steps(n_steps), n_paths(n_paths)
 {
-    // Seed RNG with current time
-    auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    rng.seed(seed);
-
     generateTimeGrid();
 
-    // Pre-allocate paths matrix: (n_steps+1) x n_paths
+    // Pre-allocate paths matrix: n_paths x (n_steps+1)
     paths.resize(n_paths, std::vector<double>(n_steps + 1));
 }
 
@@ -36,6 +31,7 @@ void MonteCarloGBM::generateTimeGrid()
     }
 }
 
+// Thread-local high-performance normal random number generator
 static inline double thread_local_normal()
 {
     thread_local struct
@@ -50,10 +46,10 @@ static inline double thread_local_normal()
             uint32_t rot = oldstate >> 59u;
             return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
         }
-        float next_float() { return next() * 2.3283064365386963e-10f; }
+        double next_double() { return next() * 2.3283064365386963e-10f; }
     } rng; // Box-Muller transform
-    double u1 = rng.next_float();
-    double u2 = rng.next_float();
+    double u1 = rng.next_double();
+    double u2 = rng.next_double();
     if (u1 < 1e-10f)
         u1 = 1e-10f;
     double r = std::sqrt(-2.0f * std::log(u1));
@@ -75,34 +71,27 @@ void MonteCarloGBM::simulate()
     const double sqrt_dt = std::sqrt(dt);
     const double drift = mu - 0.5 * sigma * sigma;
 
-#if 0
-    // Generate paths
-    for (int path = 0; path < n_paths; ++path) {
-        std::vector<double> W(n_steps + 1);
-        W[0] = 0.0; //For Brownian Motion: W(0) = 0
-        paths[path][0] = S0; // Set initial prices
+    paths.assign(n_paths, std::vector<double>(n_steps + 1));
+    final_prices.assign(n_paths, 0.0); // pre-allocate
 
-        for (int i = 1; i <= n_steps; ++i) {
-            double dW = normal_dist(rng) * sqrt_dt; // dW ~ N(0, √dt)
-            W[i] = W[i-1] + dW;  // Cumulative sum of dW
-            // GBM model: S(t) = S₀ × exp((μ - σ²/2)t + σW(t))
-            paths[path][i] = S0 * std::exp(drift * time_grid[i] + sigma * W[i]);
-        }
-    }
-#else
-    std::for_each(std::execution::par, this->paths.begin(), this->paths.end(), [&](std::vector<double> &step) {
+
+    std::for_each(std::execution::par, this->paths.begin(), this->paths.end(),[this, sqrt_dt, drift](std::vector<double>& path) {
         std::vector<double> W(n_steps + 1);
         W[0] = 0.0; //For Brownian Motion: W(0) = 0
-        step[0] = S0; // Set initial prices
+        path[0] = S0; // Set initial prices
         for (int i = 1; i <= n_steps; ++i) {
             double dW = thread_local_normal() * sqrt_dt; // dW ~ N(0, √dt)
             W[i] = W[i-1] + dW;  // Cumulative sum of dW
             // GBM model: S(t) = S₀ × exp((μ - σ²/2)t + σW(t))
-            step[i] = S0 * std::exp(drift * time_grid[i] + sigma * W[i]);
+            path[i] = S0 * std::exp(drift * time_grid[i] + sigma * W[i]);
         } 
     });
-#endif
 
+    for (int i = 0; i < n_paths; ++i) {
+        final_prices[i] = paths[i][n_steps]; // Store last time step for all paths
+    }
+
+    
     std::cout << "Sample initial prices: $";
     for (int i = 0; i < std::min(5, n_paths); ++i)
     {
@@ -118,20 +107,14 @@ void MonteCarloGBM::simulate()
     std::cout << std::endl;
 }
 
-std::vector<double> MonteCarloGBM::getFinalPrices() const
+const std::vector<double>& MonteCarloGBM::getFinalPrices() const
 {
-    std::vector<double> finalPrices;
-    finalPrices.reserve(n_paths);
-    for (int i = 0; i < n_paths; ++i)
-    {
-        finalPrices.push_back(paths[i][n_steps]);
-    }
-    return finalPrices; // Return last time step for all paths
-}
+    return final_prices;
+}   // Return last time step for all paths
 
 double MonteCarloGBM::getMeanFinalPrice() const
 {
-    const auto &final_prices = getFinalPrices();
+    const auto& final_prices = getFinalPrices();
     double sum = std::accumulate(final_prices.begin(), final_prices.end(), 0.0);
     return sum / n_paths;
 }
@@ -139,12 +122,12 @@ double MonteCarloGBM::getMeanFinalPrice() const
 double MonteCarloGBM::getMedianFinalPrice() const
 {
     return percentile(getFinalPrices(), 0.5);
-} // Final prices
+} 
 
 std::pair<double, double> MonteCarloGBM::getConfidenceInterval(double confidence) const
 {
 
-    const auto &final_prices = getFinalPrices();
+    const auto& final_prices = getFinalPrices();
     double lower_p = (1 - confidence) * 0.5;
     double upper_p = 1 - lower_p;
 
