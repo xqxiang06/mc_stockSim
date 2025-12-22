@@ -5,16 +5,21 @@
 #include <chrono>
 #include <stdexcept>
 #include <iostream>
-
 // For parallel
 #include <execution>
 #include <thread>
 
+/* log-price with jump: dlnSt​=(μ − 0.5*​σ^2 − λκ)dt + σdBt ​+ JdNt​
+    Jump size: J ~ N(mu_J, sigma_J^2)
+    where κ = E[e^J − 1]                                      */
+
 //-----------------------------------------Class-MonteCarloGBM--------------------------------------------
 
 MonteCarloGBM::MonteCarloGBM(double S0, double mu, double sigma,
-                             double T, int n_steps, int n_paths)
-    : S0(S0), mu(mu), sigma(sigma), T(T), n_steps(n_steps), n_paths(n_paths)
+                             double T, int n_steps, int n_paths,
+                             double lambda, double mu_J, double sigma_J)
+    : S0(S0), mu(mu), sigma(sigma), T(T), n_steps(n_steps), n_paths(n_paths),
+      lambda(lambda), mu_J(mu_J), sigma_J(sigma_J)
 {
     generateTimeGrid();
 
@@ -27,12 +32,12 @@ void MonteCarloGBM::generateTimeGrid()
     time_grid.resize(n_steps + 1);
     for (int i = 0; i <= n_steps; ++i)
     {
-        time_grid[i] = (i * T) / n_steps; // dt for each step
+        time_grid[i] = (i * T) / n_steps; // dt for each step (cumulative)
     }
 }
 
-// Thread-local high-performance normal random number generator
-static inline double thread_local_normal()
+// Thread-local uniform random number generator [0,1)
+static inline double thread_local_uniform()
 {
     thread_local struct
     {
@@ -46,10 +51,15 @@ static inline double thread_local_normal()
             uint32_t rot = oldstate >> 59u;
             return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
         }
-        double next_double() { return next() * 2.3283064365386963e-10f; }
-    } rng; // Box-Muller transform
-    double u1 = rng.next_double();
-    double u2 = rng.next_double();
+    } rng;
+    return rng.next() * 2.3283064365386963e-10;
+}
+
+// Thread-local normal random number generator (based on uniform)
+static inline double thread_local_normal()
+{
+    double u1 = thread_local_uniform();
+    double u2 = thread_local_uniform();
     if (u1 < 1e-10f)
         u1 = 1e-10f;
     double r = std::sqrt(-2.0f * std::log(u1));
@@ -64,26 +74,69 @@ void MonteCarloGBM::simulate()
               << "  mu = " << mu << " (annual return)\n"
               << "  sigma = " << sigma << " (annual volatility)\n"
               << "  T = " << T << " years\n"
-              << "  Steps = " << n_steps << ", Paths = " << n_paths << std::endl
-              << "  Total random numbers: " << (n_steps * n_paths) << std::endl;
+              << "  Steps = " << n_steps << ", Paths = " << n_paths << std::endl;
+    // ADD: Display jump parameters if enabled
+    if (hasJumps()) {
+        std::cout << "  [Jump Diffusion Enabled]\n"
+                  << "  lambda = " << lambda << " (jumps/year)\n"
+                  << "  mu_J = " << mu_J << " (mean jump)\n"
+                  << "  sigma_J = " << sigma_J << " (jump volatility)\n";
+    }
+
+    std::cout << "  Total random numbers: " << (n_steps * n_paths) << std::endl;
 
     const double dt = T / n_steps;
     const double sqrt_dt = std::sqrt(dt);
-    const double drift = mu - 0.5 * sigma * sigma;
+    double drift = mu - 0.5 * sigma * sigma;
+    // ADD: Drift with jump compensation
+    if (hasJumps()) {
+        double kappa = std::exp(mu_J + 0.5 * sigma_J * sigma_J) - 1.0; // expected percentage change
+        drift -= lambda * kappa;  // Add jump drift correction
+    }
 
     paths.assign(n_paths, std::vector<double>(n_steps + 1));
     final_prices.assign(n_paths, 0.0); // pre-allocate
 
 
-    std::for_each(std::execution::par, this->paths.begin(), this->paths.end(),[this, sqrt_dt, drift](std::vector<double>& path) {
+    std::for_each(std::execution::par, this->paths.begin(), this->paths.end(), [&](std::vector<double>& path) {
         std::vector<double> W(n_steps + 1);
         W[0] = 0.0; //For Brownian Motion: W(0) = 0
         path[0] = S0; // Set initial prices
         for (int i = 1; i <= n_steps; ++i) {
             double dW = thread_local_normal() * sqrt_dt; // dW ~ N(0, √dt)
             W[i] = W[i-1] + dW;  // Cumulative sum of dW
-            // GBM model: S(t) = S₀ × exp((μ - σ²/2)t + σW(t))
-            path[i] = S0 * std::exp(drift * time_grid[i] + sigma * W[i]);
+
+            // GBM (lognormal distribution) for smooth part): log(St) = log(S0) + (μ - σ²/2)t + σW(t)
+            double log_S = std::log(S0) + drift * time_grid[i] + sigma * W[i];
+
+            // ADD: Jump component (if enabled)
+            if (hasJumps()) {
+                // Poisson: approximate number of jumps in time step dt
+                double expected_jumps = lambda * dt; // Ni​∼Poisson(λΔt)
+                int num_jumps = 0;
+                
+                // Simple Poisson generation
+                if (expected_jumps > 0) {
+                    double L = std::exp(-expected_jumps); // P(N=0) = e ^ (−λΔt): the prob of NO events occurring in dt
+                    double p = 1.0; // initialize the product variable
+                    while (p > L) {
+                        p *= (thread_local_uniform()); // p = U1 ​× U2 ​× ⋯
+                        num_jumps++;
+                    }
+                    num_jumps--; // The last time in the loop Just crossed the threshold
+                }                // actual number of jumps should be reduced by 1
+
+                // Add jump effects
+                double total_jump = 0.0;
+                for (int j = 0; j < num_jumps; ++j) {
+                    double jump_size = mu_J + sigma_J * thread_local_normal();
+                    total_jump += jump_size;
+                }                // Jk ​∼ N(μJ​,σ^2J​)
+                
+                log_S += total_jump; // smooth + jump
+            }
+
+            path[i] = std::exp(log_S);
         } 
     });
 
@@ -179,6 +232,64 @@ std::pair<double, double> ParameterEstimator::estimateFromPrices(
 
     return {mu, sigma};
 }
+
+
+ParameterEstimator::JumpParameters ParameterEstimator::estimateJumpParameters(
+    const std::vector<double>& prices,
+    double threshold, int trading_days_per_year)
+{
+    // Compute log returns
+    auto log_returns = computeLogReturns(prices);
+    
+    // Calculate mean and std dev of all returns
+    double mu_daily = mean(log_returns);
+    double sigma_daily = stddev(log_returns);
+    
+    // Separate returns into "jumps" and "normal moves"
+    std::vector<double> jump_returns;
+    std::vector<double> normal_returns;
+    
+    for (double r : log_returns) {
+        // Standardized return (z-score) to distinguish Jump / Normal
+        double z_score = std::abs((r - mu_daily) / sigma_daily); // z = |_ - mean| / std
+        
+        if (z_score > threshold) {
+            // A jump - store deviation from mean
+            jump_returns.push_back(r - mu_daily);
+        } else {
+            // Normal market movement
+            normal_returns.push_back(r);
+        }
+    }
+    
+    // Estimate lambda (annual jump frequency)
+    double lambda = 0.0;
+    if (!log_returns.empty()) {
+        double jump_rate_daily = static_cast<double>(jump_returns.size()) / log_returns.size();
+        lambda = jump_rate_daily * trading_days_per_year;
+    }
+    
+    // Estimate jump size parameters
+    double mu_J = 0.0;
+    double sigma_J = 0.0;
+    if (!jump_returns.empty()) {
+        mu_J = mean(jump_returns);
+        sigma_J = stddev(jump_returns);
+    }
+    
+    // Estimate "smooth" volatility (excluding jumps)
+    double sigma_smooth = 0.0;
+    if (!normal_returns.empty()) {
+        double sigma_smooth_daily = stddev(normal_returns);
+        sigma_smooth = sigma_smooth_daily * std::sqrt(trading_days_per_year);
+    } else {
+        // Fallback to original sigma if no normal returns
+        sigma_smooth = sigma_daily * std::sqrt(trading_days_per_year);
+    }
+    
+    return {lambda, mu_J, sigma_J, sigma_smooth};
+}
+
 
 std::vector<double> ParameterEstimator::computeLogReturns(const std::vector<double> &prices)
 {

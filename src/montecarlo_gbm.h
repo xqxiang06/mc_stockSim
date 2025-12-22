@@ -8,12 +8,14 @@
 /*
 Monte Carlo Simulation for Stock Prices using Geometric Brownian Motion
     Model: S(t) = S₀ × exp((μ - σ²/2)t + σW(t))
-    where W(t) is a Wiener process (Brownian motion) */
+ADD: Jump-diffusion (Poisson Process) to accept sudden price changes
+    Model: dS = μS dt + σS dW + S(J-1) dN */
 
 class MonteCarloGBM {
     public:
-    // Constructor
-    MonteCarloGBM(double S0, double mu, double sigma, double T, int n_steps, int n_paths);
+    // ADD: Constructor with jump parameters
+    MonteCarloGBM(double S0, double mu, double sigma, double T, int n_steps, int n_paths,
+                  double lambda = 0.0, double mu_J = 0.0, double sigma_J = 0.0);
     
     // Run Monte Carlo simulation
     void simulate();
@@ -35,6 +37,11 @@ class MonteCarloGBM {
     double getT() const { return T; }
     int getNSteps() const { return n_steps; }
     int getNPaths() const { return n_paths; }
+    // ADD: Get jump parameters
+    double getLambda() const { return lambda; }
+    double getMuJ() const { return mu_J; }
+    double getSigmaJ() const { return sigma_J; }
+    bool hasJumps() const { return lambda > 0.0; }
 
 private:
     // Model parameters
@@ -44,6 +51,10 @@ private:
     double T;         // Time horizon (in years)
     int n_steps;      // Number of time steps
     int n_paths;      // Number of simulation paths
+    // ADD: Jump parameters
+    double lambda;    // Jump intensity (jumps/year)
+    double mu_J;      // Mean of log-jump size
+    double sigma_J;   // Std dev of log-jump size
     
     // Simulation results
     std::vector<std::vector<double>> paths;  // paths[path][step]
@@ -56,12 +67,25 @@ private:
 };
 
  
-// Utility class for estimating GBM parameters from historical data
+/* Utility class for estimating GBM parameters from historical data */
 class ParameterEstimator {
 public:
     // Estimate mu and sigma from price series
     static std::pair<double, double> estimateFromPrices(
         const std::vector<double>& prices, 
+        int trading_days_per_year = 252
+    );
+
+    struct JumpParameters {
+        double lambda;         // Jump intensity (jumps per year)
+        double mu_J;           // Mean log-jump size
+        double sigma_J;        // Jump size volatility
+        double sigma_smooth;   // Volatility without jumps (use this for GBM sigma)
+    };
+
+    static JumpParameters estimateJumpParameters(
+        const std::vector<double>& prices,
+        double threshold = 2.5,
         int trading_days_per_year = 252
     );
     
