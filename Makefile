@@ -5,6 +5,7 @@ LDFLAGS = -L/opt/homebrew/lib/ -ltbb
 
 # output dictionary
 BIN = bin
+DATA = data
 
 # Target executable
 TARGET = monte_carlo_sim
@@ -15,7 +16,7 @@ OBJECTS = $(SOURCES:.cpp=.o)
 HEADERS = montecarlo_gbm.h csv_reader.h
 
 # Default target
-all: bin app
+all: bin data app
 
 # Link object files to create executable
 app: $(OBJECTS)
@@ -31,6 +32,11 @@ clean:
 	rm -rf $(OBJECTS) $(BIN)
 	@echo "Cleaned build files"
 
+# Clean everything including generated data
+clean-all: clean
+	rm -f $(DATA)/mc_*.csv
+	@echo "Cleaned all files including generated results"
+
 # Run the program
 run:
 	./$(BIN)/$(TARGET)
@@ -38,8 +44,11 @@ run:
 bin:
 	@mkdir -p $(BIN)
 
+data:
+	@mkdir -p $(DATA)
+
 # Debug build
 debug: CXXFLAGS += -g -DDEBUG
 debug: clean $(BIN)/$(TARGET)
 
-.PHONY: all clean run debug
+.PHONY: all clean clean-all run debug

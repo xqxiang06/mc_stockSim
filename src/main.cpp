@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
 {
     try
     { /* User / Model Configuration */
-        const std::string csv_file = "nvda_stock.csv";
+        const std::string csv_file = "data/nvda_stock.csv";
 
         const int trading_days_per_year = 252;
         int lookback_days = 126;     // last half year for estimation
@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
 
         
         /* Write results to CSV */
-        std::ofstream out_gbm("mc_results_gbm.csv");
+        std::ofstream out_gbm("data/mc_results_gbm.csv");
         if (!out_gbm.is_open()) {
             throw std::runtime_error("Cannot write mc_results_gbm.csv");
         }
@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
         out_gbm.close();
 
         // Jump Diffusion results
-        std::ofstream out_jump("mc_results_jump.csv");
+        std::ofstream out_jump("data/mc_results_jump.csv");
         if (!out_jump.is_open()) {
             throw std::runtime_error("Cannot write mc_results_jump.csv");
         }
@@ -120,7 +120,7 @@ int main(int argc, char* argv[])
         out_jump.close();
 
         // Summary Statstics
-        std::ofstream out_summary("mc_summary.csv");
+        std::ofstream out_summary("data/mc_summary.csv");
         if (!out_summary.is_open()) {
             throw std::runtime_error("Cannot write mc_summary.csv");
         }
