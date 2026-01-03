@@ -1,0 +1,5 @@
+contract,type,strike,maturity,jd_price,bs_price,jump_premium_percent
+3-month 5% OTM Call,CALL,179.487,0.25,8.43864,8.13722,3.70411
+6-month ATM Call,CALL,170.94,0.5,17.5917,17.1962,2.29963
+3-month 5% OTM Put,PUT,162.393,0.25,6.39864,6.17819,3.56825
+6-month ATM Put,PUT,170.94,0.5,13.8849,13.393,3.6728
