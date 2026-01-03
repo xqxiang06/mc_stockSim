@@ -3,6 +3,7 @@
 
 import yfinance as yf
 import argparse
+import os
 
 def download_stock_data(
     symbol,             # stock ticker
@@ -40,7 +41,7 @@ def download_stock_data(
         
         # Determine output filename
         if not output_file:
-            output_file = f"{symbol}_STOCK_DATA.csv"
+            output_file = os.path.join("data", f"{symbol}_STOCK_DATA.csv") # throw csv into data/
         
         # Save to CSV
         df.to_csv(output_file, index=False)

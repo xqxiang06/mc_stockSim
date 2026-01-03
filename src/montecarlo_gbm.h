@@ -15,7 +15,9 @@ class MonteCarloGBM {
     public:
     // ADD: Constructor with jump parameters
     MonteCarloGBM(double S0, double mu, double sigma, double T, int n_steps, int n_paths,
-                  double lambda = 0.0, double mu_J = 0.0, double sigma_J = 0.0);
+                  double lambda = 0.0, double mu_J = 0.0, double sigma_J = 0.0,
+                  bool risk_neutral = false, double r = 0.0) ;
+                    // use for option
     
     // Run Monte Carlo simulation
     void simulate();
@@ -55,6 +57,9 @@ private:
     double lambda;    // Jump intensity (jumps/year)
     double mu_J;      // Mean of log-jump size
     double sigma_J;   // Std dev of log-jump size
+    // use for option
+    bool risk_neutral;
+    double r;
     
     // Simulation results
     std::vector<std::vector<double>> paths;  // paths[path][step]

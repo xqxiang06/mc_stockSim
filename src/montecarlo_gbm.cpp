@@ -17,9 +17,11 @@
 
 MonteCarloGBM::MonteCarloGBM(double S0, double mu, double sigma,
                              double T, int n_steps, int n_paths,
-                             double lambda, double mu_J, double sigma_J)
+                             double lambda, double mu_J, double sigma_J,
+                             bool risk_neutral, double r)
     : S0(S0), mu(mu), sigma(sigma), T(T), n_steps(n_steps), n_paths(n_paths),
-      lambda(lambda), mu_J(mu_J), sigma_J(sigma_J)
+      lambda(lambda), mu_J(mu_J), sigma_J(sigma_J),
+      risk_neutral(risk_neutral), r(r)
 {
     generateTimeGrid();
 
@@ -87,11 +89,14 @@ void MonteCarloGBM::simulate()
 
     const double dt = T / n_steps;
     const double sqrt_dt = std::sqrt(dt);
-    double drift = mu - 0.5 * sigma * sigma;
+    double drift_rate = risk_neutral ? r : mu; // Use r if risk-neutral
+    double drift = drift_rate - 0.5 * sigma * sigma;
     // ADD: Drift with jump compensation
     if (hasJumps()) {
         double kappa = std::exp(mu_J + 0.5 * sigma_J * sigma_J) - 1.0; // expected percentage change
         drift -= lambda * kappa;  // Add jump drift correction
+        
+        // Assume no jump premium for jump distribution（P=Q for jumps）
     }
 
     paths.assign(n_paths, std::vector<double>(n_steps + 1));
@@ -99,15 +104,17 @@ void MonteCarloGBM::simulate()
 
 
     std::for_each(std::execution::par, this->paths.begin(), this->paths.end(), [&](std::vector<double>& path) {
-        std::vector<double> W(n_steps + 1);
-        W[0] = 0.0; //For Brownian Motion: W(0) = 0
-        path[0] = S0; // Set initial prices
-        for (int i = 1; i <= n_steps; ++i) {
-            double dW = thread_local_normal() * sqrt_dt; // dW ~ N(0, √dt)
-            W[i] = W[i-1] + dW;  // Cumulative sum of dW
+        // Set initial prices
+        path[0] = S0;
+        double log_S = std::log(S0); // use incremental form
 
-            // GBM (lognormal distribution) for smooth part): log(St) = log(S0) + (μ - σ²/2)t + σW(t)
-            double log_S = std::log(S0) + drift * time_grid[i] + sigma * W[i];
+        for (int i = 1; i <= n_steps; ++i) {
+            // Brownian Increment
+            double dW = thread_local_normal() * sqrt_dt; // dW ~ N(0, √dt)
+        
+            // calculate log price increment (lognormal distribution)
+            // d(log S) = (μ - σ²/2 - λκ)dt + σ dW + Jumps
+            double d_log_S = drift * dt + sigma * dW;
 
             // ADD: Jump component (if enabled)
             if (hasJumps()) {
@@ -117,7 +124,7 @@ void MonteCarloGBM::simulate()
                 
                 // Simple Poisson generation
                 if (expected_jumps > 0) {
-                    double L = std::exp(-expected_jumps); // P(N=0) = e ^ (−λΔt): the prob of NO events occurring in dt
+                    double L = std::exp(-expected_jumps); // P(N=0) = e^(−λΔt): the prob of NO events occurring in dt
                     double p = 1.0; // initialize the product variable
                     while (p > L) {
                         p *= (thread_local_uniform()); // p = U1 ​× U2 ​× ⋯
@@ -126,16 +133,14 @@ void MonteCarloGBM::simulate()
                     num_jumps--; // The last time in the loop Just crossed the threshold
                 }                // actual number of jumps should be reduced by 1
 
-                // Add jump effects
-                double total_jump = 0.0;
+                // Add jump effects to the log price increment
                 for (int j = 0; j < num_jumps; ++j) {
-                    double jump_size = mu_J + sigma_J * thread_local_normal();
-                    total_jump += jump_size;
-                }                // Jk ​∼ N(μJ​,σ^2J​)
-                
-                log_S += total_jump; // smooth + jump
+                    double jump_size = mu_J + sigma_J * thread_local_normal(); // Jk ​∼ N(μ_J, σ_J²)
+                    d_log_S += jump_size; // Add jump to this step's increment
+                }
             }
-
+            
+            log_S += d_log_S; // smooth + jump
             path[i] = std::exp(log_S);
         } 
     });
