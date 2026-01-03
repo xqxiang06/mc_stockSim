@@ -1,12 +1,14 @@
 #include "montecarlo_gbm.h"
 #include "csv_reader.h"
+#include "european_option.h"
 #include <iostream>
 #include <iomanip>
 #include <fstream>
 #include <vector>
 #include <string>
+#include <sstream>
 
-int main(int argc, char* argv[])
+int main()
 {
     try
     { /* User / Model Configuration */
@@ -19,9 +21,11 @@ int main(int argc, char* argv[])
         double T = 0.5;              // year(s)
         double jump_threshold = 2.5; // Z-score threshold for identifying jumps
 
+        std::stringstream null_stream;
+        std::streambuf* old_cout = std::cout.rdbuf();
+
         /* Read real NVIDIA prices */
-        std::vector<double> prices =
-            readLastNPrices(csv_file, lookback_days);
+        std::vector<double> prices = readLastNPrices(csv_file, lookback_days);
 
         double S0 = prices.back(); // last observed price
 
@@ -41,7 +45,6 @@ int main(int argc, char* argv[])
         double mu = std::min(mu_est, 0.3);
         double sigma = std::min(sigma_est, 0.5);
 
-        
         /* Estimate Jump Parameters */
         auto jump_params = ParameterEstimator::estimateJumpParameters(
             prices, jump_threshold, trading_days_per_year);
@@ -70,7 +73,6 @@ int main(int argc, char* argv[])
         double expected_return_gbm = (mean_price_gbm / S0 - 1) * 100;
         std::cout << "Expected return: " << expected_return_gbm << "%\n";
 
-        
         /* Run Jump Diffusion Simulation */
         std::cout << "\n      JUMP DIFFUSION SIMULATION\n";
         
@@ -90,7 +92,6 @@ int main(int argc, char* argv[])
         double expected_return_jump = (mean_price_jump / S0 - 1) * 100;
         std::cout << "Expected return: " << expected_return_jump << "%\n";
 
-        
         /* Write results to CSV */
         std::ofstream out_gbm("data/mc_results_gbm.csv");
         if (!out_gbm.is_open()) {
@@ -132,6 +133,64 @@ int main(int argc, char* argv[])
                     << ci_low_jump << "," << ci_high_jump << "," << expected_return_jump << "\n";
         out_summary.close();
 
+        // ==================== ADD OPTION PRICING ====================
+        std::cout << "\n\n===== OPTION PRICING =====\n";
+        
+        // Option parameters (can be changed)
+        double r = 0.045;  // 4.5% risk-free rate (T-bill)
+        std::cout << "[Risk-Neutral Measure: risk-free rate r=" << (r*100) << "%]\n";
+        
+        // Price a few common options
+        struct OptionContract {
+            double K;
+            double T;
+            std::string name;
+            EuropeanOption::Type type;
+        };
+        
+        std::vector<OptionContract> options = {
+        // call constructor
+            {S0 * 1.05, 0.25, "3-month 5% OTM Call", EuropeanOption::Type::CALL},
+            {S0, 0.5, "6-month ATM Call", EuropeanOption::Type::CALL},
+            {S0 * 0.95, 0.25, "3-month 5% OTM Put", EuropeanOption::Type::PUT},
+            {S0, 0.5, "6-month ATM Put", EuropeanOption::Type::PUT}
+        };
+        
+        std::ofstream out_options("data/option_prices.csv");
+        if (!out_options.is_open()) {
+            throw std::runtime_error("Cannot write option_prices.csv");
+        }
+        
+        out_options << "contract,type,strike,maturity,jd_price,bs_price,jump_premium_percent\n";
+        
+        for (const auto& opt : options) {
+            // Suppress MC output during option pricing
+            std::cout.rdbuf(null_stream.rdbuf());
+
+            EuropeanOption option(opt.K, opt.T, r, opt.type);
+            
+            int opt_steps = static_cast<int>(opt.T * trading_days_per_year);
+            
+            double jd_price = option.priceJumpDiffusion(
+                S0, mu, jump_params.sigma_smooth,
+                jump_params.lambda, jump_params.mu_J, jump_params.sigma_J,
+                100000, opt_steps
+            );
+            // Black-Scholes price (for comparison)
+            double bs_price = option.blackScholesPrice(S0, jump_params.sigma_smooth);
+            double premium_pct = ( (jd_price - bs_price) / bs_price ) * 100;
+                    /* the extra return investors demand for taking on the risk of sudden, large, unpredictable price changes (jumps) 
+                        in stocks or the overall market, beyond normal volatility (compensation for "tail risk") */
+
+            std::cout.rdbuf(old_cout);  // Restore cout for printing
+            std::cout << opt.name << ": $" << std::setprecision(2) << jd_price << "\n";
+            
+            out_options << opt.name << ","
+                        << (opt.type == EuropeanOption::Type::CALL ? "CALL" : "PUT") << ","
+                        << opt.K << "," << opt.T << "," << jd_price << "," << bs_price << ","
+                        << premium_pct << "\n";
+        }
+        out_options.close();
         std::cout << "\nResults written to csv files\n";
     }
     catch (const std::exception& e)
