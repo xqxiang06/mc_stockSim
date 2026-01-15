@@ -13,7 +13,7 @@ TARGET = monte_carlo_sim
 # Source files (auto-detect from src/)
 SOURCES = $(wildcard src/*.cpp)
 OBJECTS = $(SOURCES:.cpp=.o)
-HEADERS = montecarlo_gbm.h csv_reader.h european_option.h
+HEADERS = montecarlo_gbm.h csv_reader.h european_option.h regime_switch.h
 
 # Default target
 all: bin data app

@@ -1,12 +1,14 @@
 #include "montecarlo_gbm.h"
 #include "csv_reader.h"
 #include "european_option.h"
+#include "regime_switch.h"
 #include <iostream>
 #include <iomanip>
 #include <fstream>
 #include <vector>
 #include <string>
 #include <sstream>
+#include <algorithm>
 
 int main()
 {
@@ -120,6 +122,89 @@ int main()
         }
         out_jump.close();
 
+        
+        // Run Regime-Switching Simulation
+        std::cout << "\n     REGIME-SWITCHING SIMULATION\n\n";
+        
+        // Create regime model (Typical market with rare crashes)
+        RegimeConfig regime_cfg = RegimePresets::Typical();  // choose from .h
+        RegimeSwitching regime_model(regime_cfg);
+
+        std::cout << "Normal: μ = " << regime_cfg.normal_params.mu << ", σ = " << regime_cfg.normal_params.sigma << "\n";
+        std::cout << "Crash: μ = " << regime_cfg.crash_params.mu << ", σ = " << regime_cfg.crash_params.sigma << "\n";
+
+        // Print regime configuration
+        regime_model.printTransitionMatrix();
+        
+        auto [pi_normal, pi_crash] = regime_model.getStationaryDistribution();
+        std::cout << "\nStationary Distribution:\n";
+        std::cout << "  Normal: " << std::fixed << std::setprecision(3) << (pi_normal * 100) << "% of time\n";
+        std::cout << "  Crash:  " << (pi_crash * 100) << "% of time\n\n";
+
+
+        // Simulate with regime-switching
+        std::vector<double> final_prices_regime;
+        final_prices_regime.reserve(n_paths);
+        
+        std::mt19937 gen_regime(42);
+        std::normal_distribution<double> normal_dist(0.0, 1.0);
+        double dt = T / n_steps;
+        
+        for (int path = 0; path < n_paths; path++) {
+            double S = S0;
+            regime_model.reset();  // Start each path in Normal
+            
+            for (int step = 0; step < n_steps; step++) {
+                auto params = regime_model.getCurrentParameters();
+                
+                double Z = normal_dist(gen_regime);
+                double drift = (params.mu - 0.5 * params.sigma * params.sigma) * dt;
+                double diffusion = params.sigma * std::sqrt(dt) * Z;
+                
+                S *= std::exp(drift + diffusion);
+                regime_model.updateRegime();
+            }
+            
+            final_prices_regime.push_back(S);
+        }
+        
+        // Calculate statistics
+        double sum_regime = 0.0;
+        for (double p : final_prices_regime) sum_regime += p;
+        double mean_price_regime = sum_regime / n_paths;
+        
+        std::vector<double> sorted_regime = final_prices_regime;
+        std::sort(sorted_regime.begin(), sorted_regime.end());
+        double median_price_regime = sorted_regime[n_paths / 2];
+        
+        size_t ci_low_idx = static_cast<size_t>(n_paths * 0.025);
+        size_t ci_high_idx = static_cast<size_t>(n_paths * 0.975);
+        double ci_low_regime = sorted_regime[ci_low_idx];
+        double ci_high_regime = sorted_regime[ci_high_idx];
+        
+        std::cout << "\n===== Regime-Switching Results =====\n";
+        std::cout << "Mean final price   : $" << mean_price_regime << "\n";
+        std::cout << "Median final price : $" << median_price_regime << "\n";
+        std::cout << "95% CI: [$" << ci_low_regime << ", $" << ci_high_regime << "]\n";
+        double expected_return_regime = (mean_price_regime / S0 - 1) * 100;
+        std::cout << "Expected return: " << expected_return_regime << "%\n";
+        
+        // Print detailed regime statistics
+        regime_model.printStatistics();
+        
+        // Write results to CSV
+        std::ofstream out_regime("data/mc_results_regime.csv");
+        if (!out_regime.is_open()) {
+            throw std::runtime_error("Cannot write mc_results_regime.csv");
+        }
+        
+        out_regime << "path_id, final_price\n";
+        for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_regime.size()); ++i) {
+            out_regime << i << "," << final_prices_regime[i] << "\n";
+        }
+        out_regime.close();
+
+        
         // Summary Statstics
         std::ofstream out_summary("data/mc_summary.csv");
         if (!out_summary.is_open()) {
@@ -131,6 +216,8 @@ int main()
                     << ci_low_gbm << "," << ci_high_gbm << "," << expected_return_gbm << "\n";
         out_summary << "Jump," << mean_price_jump << "," << median_price_jump << ","
                     << ci_low_jump << "," << ci_high_jump << "," << expected_return_jump << "\n";
+        out_summary << "Regime," << mean_price_regime << "," << median_price_regime << ","
+                    << ci_low_regime << "," << ci_high_regime << "," << expected_return_regime << "\n";
         out_summary.close();
 
         // ==================== ADD OPTION PRICING ====================
