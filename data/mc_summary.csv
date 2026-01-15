@@ -1,3 +1,4 @@
 model,mean_price,median_price,ci_low,ci_high,expected_return
 GBM,198.562,193.264,122.644,304.792,16.1588
 Jump,198.615,193.198,122.651,305.673,16.1899
+Regime,177.293,175.297,124.877,240.924,3.71666

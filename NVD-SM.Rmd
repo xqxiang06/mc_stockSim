@@ -14,7 +14,7 @@ library(dplyr)
 library(readr)
 
 # Read CSV
-nvidia <- read_csv("NVIDIA_STOCK.csv", col_names = FALSE)
+nvidia <- read_csv("data/NVIDIA_STOCK.csv", col_names = FALSE)
 
 # Use FIRST ROW as proper column names (Price, Adj Close, Close...)
 colnames(nvidia) <- as.character(unlist(nvidia[1, ]))
