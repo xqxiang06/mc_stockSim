@@ -111,8 +111,8 @@ The **jump premium** — the percentage by which the jump-diffusion price exceed
 ## Clone
 
 ```bash
-git clone https://github.com/Joecheong2006/MonteCarloSimulator.git
-cd MonteCarloSimulator
+git clone https://github.com/xqxiang06/mc_stockSim.git
+cd mc_stockSim
 ```
 
 ---
