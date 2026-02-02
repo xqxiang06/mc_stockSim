@@ -22,12 +22,14 @@ int main()
         int n_steps = 126;           // half year simulation
         double T = 0.5;              // year(s)
         double jump_threshold = 2.5; // Z-score threshold for identifying jumps
+        int regime_lookback_days = 252; // 1 year for regime calibration (more data → better cluster separation)
 
         std::stringstream null_stream;
         std::streambuf* old_cout = std::cout.rdbuf();
 
         /* Read real NVIDIA prices */
         std::vector<double> prices = readLastNPrices(csv_file, lookback_days);
+        std::vector<double> regime_prices = readLastNPrices(csv_file, regime_lookback_days); // longer history for regime calibration
 
         double S0 = prices.back(); // last observed price
 
@@ -126,12 +128,11 @@ int main()
         // Run Regime-Switching Simulation
         std::cout << "\n     REGIME-SWITCHING SIMULATION\n\n";
         
-        // Create regime model (Typical market with rare crashes)
-        RegimeConfig regime_cfg = RegimePresets::Typical();  // choose from .h
+        // Create regime model (calibrates all 6 parameters from real data)
+        // calibrateFromData() prints internally: regime counts, μ/σ per regime, P(N→C), P(C→N)
+        MarketData regime_data(regime_prices);
+        RegimeConfig regime_cfg = RegimeConfig::calibrateFromData(regime_data, 20, true);
         RegimeSwitching regime_model(regime_cfg);
-
-        std::cout << "Normal: μ = " << regime_cfg.normal_params.mu << ", σ = " << regime_cfg.normal_params.sigma << "\n";
-        std::cout << "Crash: μ = " << regime_cfg.crash_params.mu << ", σ = " << regime_cfg.crash_params.sigma << "\n";
 
         // Print regime configuration
         regime_model.printTransitionMatrix();

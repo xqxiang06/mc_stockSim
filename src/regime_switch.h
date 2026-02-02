@@ -1,6 +1,5 @@
 #ifndef REGIME_SWITCH_H
 #define REGIME_SWITCH_H
-
 #include <random>
 #include <string>
 #include <vector>
@@ -24,6 +23,18 @@ struct RegimeParameters {
         : mu(m), sigma(s), name(n) {}
 };
 
+// Hold market data for calibration
+struct MarketData {
+    std::vector<double> prices;
+    
+    // Constructors
+    MarketData() {}
+    MarketData(const std::vector<double>& p) : prices(p) {}
+    
+    size_t size() const { return prices.size(); }
+    bool isValid() const { return prices.size() > 1; }
+};
+
 // Struct to hold complete regime-switching configuration
 struct RegimeConfig {
     RegimeParameters normal_params;
@@ -44,9 +55,12 @@ struct RegimeConfig {
         normal_to_crash_prob(p_nc),
         crash_to_normal_prob(p_cn) {}
     
-    // TODO: Add static method for calibration from data
-    // static RegimeConfig calibrateFromData(const std::vector<double>& prices, 
-    //                                       const std::vector<double>& dates);
+    // Static method for calibration from data (Simple Volatility-Based)
+    static RegimeConfig calibrateFromData(
+        const MarketData &data,
+        int rolling_window = 20,
+        bool use_clustering = true
+    );
 };
 
 class RegimeSwitching {
@@ -142,6 +156,12 @@ namespace RegimePresets {
     inline RegimeConfig MildCorrection() {
         return RegimeConfig(0.10, 0.20, -0.20, 0.35, 0.03, 0.50);
     }
+}
+
+// Optional utility for loading data from CSV
+namespace RegimeDataLoader {
+    // Load market data from CSV file (format: date,price)
+    MarketData loadFromCSV(const std::string& filename);
 }
 
 #endif
