@@ -6,7 +6,7 @@ import pandas as pd
 """
 Use Nvidia real data to test Monte Carlo Simulation for stock GBM model
 """
-nvda = pd.read_csv("NVIDIA_STOCK_CLEAN.csv")
+nvda = pd.read_csv("data/NVIDIA_STOCK_CLEAN.csv")
 # Look through last 6 months' (126 trading days) adjusted close price
 prices = nvda["Adj Close"].values[-126:]
 # Estimate mu and sigma from real data

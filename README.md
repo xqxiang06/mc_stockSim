@@ -21,6 +21,12 @@ d(ln S) = (μ − σ²/2) dt + σ dW
 
 `μ` and `σ` are estimated from historical daily log returns and annualized using 252 trading days.
 
+#### Simulation Results
+   
+![Real NVIDIA vs Monte Carlo GBM](pic/simulate_path.png)
+   
+*Figure 1: Comparison of real NVIDIA stock prices (past 6 months) vs Monte Carlo GBM simulation*
+
 ---
 
 ### 2. Jump Diffusion (Merton Model)
