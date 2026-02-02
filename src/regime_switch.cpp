@@ -1,4 +1,5 @@
 #include "regime_switch.h"
+#include "montecarlo_gbm.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -9,20 +10,6 @@
 
 // Helper functions for calibration (in anonymous namespace - private)
 namespace {
-    // Compute log returns from prices: r_t = ln(S_t / S_{t-1})
-    std::vector<double> computeLogReturns(const std::vector<double>& prices) {
-        std::vector<double> returns;
-        returns.reserve(prices.size() - 1);
-        
-        for (size_t i = 1; i < prices.size(); ++i) {
-            if (prices[i] <= 0 || prices[i-1] <= 0) {
-                throw std::invalid_argument("All prices must be positive");
-            }
-            returns.push_back(std::log(prices[i] / prices[i-1]));
-        }
-        return returns;
-    } // the same thing as in montecarlo_gbm.cpp starting from line 299
-    
     // Compute rolling volatility: vol_t = std( 1/(window_size) * sum(r_t - r_mean)^2 ) × √252
     //                                                using log_returns
     std::vector<double> computeRollingVolatility(
@@ -208,7 +195,7 @@ RegimeConfig RegimeConfig::calibrateFromData(
     std::cout << "  Rolling window: " << rolling_window << " days\n";
     
     // Step 1: Compute log returns
-    auto returns = computeLogReturns(data.prices);
+    auto returns = ParameterEstimator::computeLogReturns(data.prices);
     
     // Step 2: Compute rolling volatility
     auto volatilities = computeRollingVolatility(returns, rolling_window);

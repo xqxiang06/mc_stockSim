@@ -93,9 +93,10 @@ public:
         double threshold = 2.5,
         int trading_days_per_year = 252
     );
+
+    static std::vector<double> computeLogReturns(const std::vector<double>& prices);
     
 private:
-    static std::vector<double> computeLogReturns(const std::vector<double>& prices);
     static double mean(const std::vector<double>& data);
     static double stddev(const std::vector<double>& data);
 };
