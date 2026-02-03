@@ -16,47 +16,78 @@ namespace {
         const std::vector<double>& returns, 
         int window // the last N days
     ) {
-        std::vector<double> volatilities;
-        volatilities.reserve(returns.size());
+        const size_t n = returns.size();
+        std::vector<double> volatilities(n, std::numeric_limits<double>::quiet_NaN());
         
-        for (size_t i = 0; i < returns.size(); ++i) {
-            size_t start = (i >= static_cast<size_t>(window)) ? i - window + 1 : 0; // first index(day) included in the window
-            size_t count = i - start + 1; // numbers of data points in the current window
-            
-            // Calculate mean
-            double sum = 0.0;
-            for (size_t j = start; j <= i; ++j) {
-                sum += returns[j];
+        // Calculate mean and its square
+        double sum = 0.0;
+        double sumsq = 0.0;
+
+        for (size_t i = 0; i < n; ++i) {
+            const double x = returns[i];
+            sum += x;
+            sumsq += x * x;
+
+            // remove element that falls out of the window
+            if (i >= static_cast<size_t>(window)) {
+                const double old = returns[i - window];
+                sum -= old;
+                sumsq -= old * old;
             }
-            double mean = sum / count;
-            
-            // Calculate variance
-            double var_sum = 0.0;
-            for (size_t j = start; j <= i; ++j) {
-                double diff = returns[j] - mean;
-                var_sum += diff * diff;
+
+            // only compute vol when window is full: i >= window-1
+            if (i + 1 >= static_cast<size_t>(window)) {
+                const double m = static_cast<double>(window);
+                const double mean = sum / m;
+
+                // sample variance: 1/(m-1) * Σ(x-mean)^2
+                // Use stable formula: Σ(x-mean)^2 = sumsq - m*mean^2
+                double sse = sumsq - m * mean * mean;       // sum of squared errors
+                if (sse < 0.0) sse = 0.0;                   // numerical guard
+
+                const double var_sample = sse / (m - 1.0);  // sample variance
+                const double daily_std = std::sqrt(var_sample);
+
+                volatilities[i] = daily_std * std::sqrt(252.0);  // Annualized
             }
-            double variance = var_sum / count;
-            double vol = std::sqrt(variance) * std::sqrt(252.0);  // Annualized
-            
-            volatilities.push_back(vol);
         }
-        
+    
         return volatilities;
     }
 
     // K-means clustering (k=2) to separate low/high volatility regimes
-    std::vector<int> kMeansClustering(const std::vector<double>& volatilities) {
-        if (volatilities.empty()) {
-            return {};
+    // - Ignores NaN values (they get assignment = -1)
+    // - Handles empty cluster by reinitializing centroid
+    // - Ensures: label 0 = low-vol (Normal), label 1 = high-vol (Crash)
+    static std::vector<int> kMeansClustering(const std::vector<double>& volatilities) {
+        const size_t n = volatilities.size();
+        std::vector<int> assignments(n, -1); // -1 = invalid/ignored (NaN)
+
+        // collect valid indices
+        std::vector<size_t> idx;
+        idx.reserve(n);
+        for (size_t i = 0; i < n; ++i) {
+            if (!std::isnan(volatilities[i]) && std::isfinite(volatilities[i])) {
+                idx.push_back(i);
+            }
+        }
+        if (idx.empty()) return assignments;
+        if (idx.size() == 1) {
+            assignments[idx[0]] = 0;
+            return assignments;
         }
         
         // Initialize centroids: min and max volatilities
-        auto minmax = std::minmax_element(volatilities.begin(), volatilities.end());
-        double c0 = *minmax.first;   // Low volatility centroid (Normal)
-        double c1 = *minmax.second;  // High (Crush)
-        
-        std::vector<int> assignments(volatilities.size(), 0); // assume every point starts at 0
+        double vmin = volatilities[idx[0]];
+        double vmax = volatilities[idx[0]];
+        for (size_t k = 1; k < idx.size(); ++k) {
+            double v = volatilities[idx[k]];
+            vmin = std::min(vmin, v);
+            vmax = std::max(vmax, v);
+        }
+        double c0 = vmin; // low vol centroid
+        double c1 = vmax; // high (crash)
+
         bool changed = true;
         int max_iterations = 100;
         int iter = 0;
@@ -66,13 +97,15 @@ namespace {
             ++iter;
             
             // Assignment step: assign each point to nearest centroid
-            for (size_t i = 0; i < volatilities.size(); ++i) {
-                double dist0 = std::abs(volatilities[i] - c0);
-                double dist1 = std::abs(volatilities[i] - c1);
-                int new_assignment = (dist0 < dist1) ? 0 : 1; // zi ​= arg( min​∣ vi​−ck​ ∣ )
+            for (size_t k = 0; k < idx.size(); ++k) {
+                const size_t i = idx[k];
+                const double v = volatilities[i];
+                const double dist0 = std::abs(v - c0);
+                const double dist1 = std::abs(v - c1);
+                const int new_a = (dist0 <= dist1) ? 0 : 1; // zi ​= arg( min​∣ vi​−ck​ ∣ )
                 
-                if (new_assignment != assignments[i]) {
-                    assignments[i] = new_assignment;
+                if (assignments[i] != new_a) {
+                    assignments[i] = new_a;
                     changed = true;
                 }
             }
@@ -81,18 +114,27 @@ namespace {
             double sum0 = 0.0, sum1 = 0.0;
             int count0 = 0, count1 = 0;
             
-            for (size_t i = 0; i < volatilities.size(); ++i) {
+            for (size_t k = 0; k < idx.size(); ++k) {
+                const size_t i = idx[k];
                 if (assignments[i] == 0) {
                     sum0 += volatilities[i]; // cluster for 0-normal
-                    count0++;
-                } else {
+                    ++count0;
+                } else if (assignments[i] == 1) {
                     sum1 += volatilities[i]; // cluster for 1-crush
-                    count1++;
+                    ++count1;
                 }
             }
             
             if (count0 > 0) c0 = sum0 / count0;
             if (count1 > 0) c1 = sum1 / count1;
+        }
+
+        // Guarantee: label 0 = low-vol (Normal), label 1 = high-vol (Crash)
+        // possibly two centroids crossing during iteration
+        if (c0 > c1) {
+            for (size_t k = 0; k < idx.size(); ++k) {
+                assignments[idx[k]] ^= 1;  // flip 0↔1
+            }
         }
         
         return assignments;
@@ -151,7 +193,9 @@ namespace {
         int n_normal = 0, n_crash = 0;
         int transitions_nc = 0, transitions_cn = 0;
         
-        for (size_t i = 0; i < regime_sequence.size() - 1; ++i) {
+        for (size_t i = 0; i < regime_sequence.size(); ++i) {
+            if (regime_sequence[i] == -1 || regime_sequence[i+1] == -1)
+                continue; // skip any transition containing "-1"
             if (regime_sequence[i] == 0) {  // Currently in Normal
                 n_normal++;
                 if (regime_sequence[i+1] == 1) {  // Transition to Crash
@@ -179,8 +223,7 @@ namespace {
 
 RegimeConfig RegimeConfig::calibrateFromData(
     const MarketData& data,
-    int rolling_window,
-    bool use_clustering
+    int rolling_window
 ) {
     // Validate input data
     if (!data.isValid()) {
@@ -203,6 +246,20 @@ RegimeConfig RegimeConfig::calibrateFromData(
     // Step 3: Identify regimes (0=Normal, 1=Crash)
     std::vector<int> regime_sequence;
     regime_sequence = kMeansClustering(volatilities);
+    // check point
+    if (regime_sequence.size() != returns.size()) {
+        throw std::logic_error(
+            "regime_sequence size does not match returns size"
+        );
+    }
+
+    int valid = 0, normal = 0, crash = 0;
+    for (int z : regime_sequence) {
+        if (z == 0) { ++valid; ++normal; }
+        else if (z == 1) { ++valid; ++crash; }
+    }
+    std::cout << "  Valid regime tags: " << valid
+            << " (Normal=" << normal << ", Crash=" << crash << ")\n";
     
     // Step 4: Estimate parameters for each regime
     double normal_mu, normal_sigma, crash_mu, crash_sigma;
@@ -214,14 +271,20 @@ RegimeConfig RegimeConfig::calibrateFromData(
     estimateTransitionProbs(regime_sequence, p_nc, p_cn);
     
     // Count regime occurrences for diagnostics
-    int normal_count = std::count(regime_sequence.begin(), regime_sequence.end(), 0);
-    int crash_count = regime_sequence.size() - normal_count;
+    int normal_count = 0; int crash_count  = 0; int invalid_count = 0;
+
+    for (int z : regime_sequence) {
+        if (z == 0) normal_count++;
+        else if (z == 1) crash_count++;
+        else invalid_count++;
+    }
     
     std::cout << "\n  Identified regimes:\n";
     std::cout << "    Normal periods: " << normal_count << " (" 
               << (100.0 * normal_count / regime_sequence.size()) << "%)\n";
     std::cout << "    Crash periods:  " << crash_count << " (" 
               << (100.0 * crash_count / regime_sequence.size()) << "%)\n";
+    std::cout << "    Ignored (NaN):  " << invalid_count << "\n";
     
     std::cout << "\n  Estimated parameters:\n";
     std::cout << "    Normal: μ = " << std::fixed << std::setprecision(3) << normal_mu 

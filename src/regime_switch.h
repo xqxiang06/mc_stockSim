@@ -58,8 +58,7 @@ struct RegimeConfig {
     // Static method for calibration from data (Simple Volatility-Based)
     static RegimeConfig calibrateFromData(
         const MarketData &data,
-        int rolling_window = 20,
-        bool use_clustering = true
+        int rolling_window = 20
     );
 };
 
