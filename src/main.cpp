@@ -2,6 +2,7 @@
 #include "csv_reader.h"
 #include "european_option.h"
 #include "regime_switch.h"
+#include "portfolio.h"
 #include <iostream>
 #include <iomanip>
 #include <fstream>
@@ -14,7 +15,7 @@ int main()
 {
     try
     { /* User / Model Configuration */
-        const std::string csv_file = "data/nvda_stock.csv";
+        const std::string csv_file = "data/VOO_STOCK_DATA.csv";
 
         const int trading_days_per_year = 252;
         int lookback_days = 126;     // last half year for estimation
@@ -131,7 +132,7 @@ int main()
         // Create regime model (calibrates all 6 parameters from real data)
         // calibrateFromData() prints internally: regime counts, μ/σ per regime, P(N→C), P(C→N)
         MarketData regime_data(regime_prices);
-        RegimeConfig regime_cfg = RegimeConfig::calibrateFromData(regime_data, 20, true);
+        RegimeConfig regime_cfg = RegimeConfig::calibrateFromData(regime_data, 20);
         RegimeSwitching regime_model(regime_cfg);
 
         // Print regime configuration
@@ -221,7 +222,7 @@ int main()
                     << ci_low_regime << "," << ci_high_regime << "," << expected_return_regime << "\n";
         out_summary.close();
 
-        // ==================== ADD OPTION PRICING ====================
+        // ==================== OPTION PRICING ====================
         std::cout << "\n\n===== OPTION PRICING =====\n";
         
         // Option parameters (can be changed)
@@ -280,6 +281,84 @@ int main()
         }
         out_options.close();
         std::cout << "\nResults written to csv files\n";
+
+
+        // ========================= PORTFOLIO SIMULATION =========================
+        std::cout << "\n\n===== PORTFOLIO SIMULATION (Stock/Bond) =====\n";
+        
+        // Manual bond parameters
+        VasicekParameters bond_params(
+            0.15,   // κ (mean reversion speed)
+            0.045,  // θ (long-term mean rate 4.5%)
+            0.01,   // σ (rate volatility)
+            0.045   // r0 (initial rate 4.5%)
+        );
+        
+        double bond_maturity = 10.0;        // 10-year bond
+        double correlation = -0.2;          // Stock-bond correlation (negative = diversification)
+        double stock_weight = 0.60;         // 60% stock / 40% bond
+        
+        std::cout << "\nPortfolio Configuration:\n";
+        std::cout << "  Allocation: " << (stock_weight * 100) << "% stock / " 
+                  << ((1 - stock_weight) * 100) << "% bond\n";
+        std::cout << "  Stock-Bond Correlation: " << correlation << "\n";
+        std::cout << "  Bond: " << bond_maturity << "-year maturity\n";
+        std::cout << "  Bond rate: " << (bond_params.r0 * 100) << "%\n";
+        
+        // Create and run portfolio
+        Portfolio portfolio(
+            S0, mu, sigma,              // Stock params (already calibrated above)
+            bond_params,                // Bond params (manual)
+            bond_maturity,
+            correlation,
+            stock_weight,
+            T, n_steps, n_paths
+        );
+        
+        portfolio.simulate();
+        
+        // Collect results
+        double mean_portfolio = portfolio.getMeanFinalValue();
+        double median_portfolio = portfolio.getMedianFinalValue();
+        auto [pf_ci_low, pf_ci_high] = portfolio.getConfidenceInterval(0.95);
+        
+        // Calculate initial portfolio value for return calculation
+        VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
+        double initial_bond_price = temp_bond.getInitialPrice();
+        double initial_portfolio = stock_weight * S0 + (1 - stock_weight) * initial_bond_price;
+        double portfolio_return = (mean_portfolio / initial_portfolio - 1.0) * 100;
+        
+        std::cout << "\n===== Portfolio Results =====\n";
+        std::cout << "Initial value      : $" << std::fixed << std::setprecision(2) << initial_portfolio << "\n";
+        std::cout << "Mean final value   : $" << mean_portfolio << "\n";
+        std::cout << "Median final value : $" << median_portfolio << "\n";
+        std::cout << "95% CI: [$" << pf_ci_low << ", $" << pf_ci_high << "]\n";
+        std::cout << "Expected return: " << portfolio_return << "%\n";
+        
+        // Sharpe ratio
+        double sharpe = portfolio.getSharpeRatio(r);
+        std::cout << "Sharpe Ratio: " << std::setprecision(3) << sharpe << "\n";
+        
+        // Write results
+        portfolio.writeResultsToCSV("data/portfolio_results.csv");
+        
+        // Add to summary CSV
+        std::ofstream out_summary_append("data/mc_summary.csv", std::ios::app);
+        if (out_summary_append.is_open()) {
+            out_summary_append << "Portfolio," << mean_portfolio << "," << median_portfolio << ","
+                              << pf_ci_low << "," << pf_ci_high << "," << portfolio_return << "\n";
+            out_summary_append.close();
+        }
+        
+        // Comparison with stock-only
+        std::cout << "\n===== Diversification Benefit =====\n";
+        double stock_ci_width = ci_high_gbm - ci_low_gbm;
+        double portfolio_ci_width = pf_ci_high - pf_ci_low;
+        double risk_reduction = (1.0 - portfolio_ci_width / stock_ci_width) * 100;
+        
+        std::cout << "Stock-only CI width:   $" << stock_ci_width << "\n";
+        std::cout << "Portfolio CI width:    $" << portfolio_ci_width << "\n";
+        std::cout << "Risk reduction:        " << std::setprecision(1) << risk_reduction << "%\n";
     }
     catch (const std::exception& e)
     {
