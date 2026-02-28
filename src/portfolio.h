@@ -21,6 +21,7 @@ class Portfolio {
 public:
     // constructor
     Portfolio(
+        double total_investment,
         double stock_S0, // intital stock price
         double stock_mu, // stock drift
         double stock_sigma, // stock volatility
@@ -68,6 +69,9 @@ private:
     double correlation;
     double stock_weight;
     double bond_weight;
+    double total_investment;
+    double n_stock;  // Actual number of shares
+    double n_bond;   // Actual number of bonds
     
     // Simulation parameters
     double T;
@@ -98,6 +102,7 @@ public:
      * @return Configured Portfolio object
      */
     static Portfolio calibrateFromData(
+        double total_investment,
         const std::vector<double>& stock_prices,
         const std::vector<double>& bond_yields,
         double stock_weight,

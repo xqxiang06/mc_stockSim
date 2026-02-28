@@ -305,9 +305,12 @@ int main()
         std::cout << "  Bond: " << bond_maturity << "-year maturity\n";
         std::cout << "  Bond rate: " << (bond_params.r0 * 100) << "%\n";
         
+        double TOTAL_INVESTMENT = 10000.0;
+
         // Create and run portfolio
         Portfolio portfolio(
-            S0, mu, sigma,              // Stock params (already calibrated above)
+            TOTAL_INVESTMENT, S0, 
+            mu, sigma,                  // Stock params (already calibrated above)
             bond_params,                // Bond params (manual)
             bond_maturity,
             correlation,
@@ -326,10 +329,10 @@ int main()
         VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
         double initial_bond_price = temp_bond.getInitialPrice();
         double initial_portfolio = stock_weight * S0 + (1 - stock_weight) * initial_bond_price;
-        double portfolio_return = (mean_portfolio / initial_portfolio - 1.0) * 100;
+        double portfolio_return = (mean_portfolio / TOTAL_INVESTMENT - 1.0) * 100;
         
         std::cout << "\n===== Portfolio Results =====\n";
-        std::cout << "Initial value      : $" << std::fixed << std::setprecision(2) << initial_portfolio << "\n";
+        std::cout << "Initial value      : $" << std::fixed << std::setprecision(2) << TOTAL_INVESTMENT << "\n";
         std::cout << "Mean final value   : $" << mean_portfolio << "\n";
         std::cout << "Median final value : $" << median_portfolio << "\n";
         std::cout << "95% CI: [$" << pf_ci_low << ", $" << pf_ci_high << "]\n";
@@ -350,15 +353,13 @@ int main()
             out_summary_append.close();
         }
         
-        // Comparison with stock-only
-        std::cout << "\n===== Diversification Benefit =====\n";
-        double stock_ci_width = ci_high_gbm - ci_low_gbm;
+        // Scale stock and bond && Risk reduction rate
+        double stock_only_shares = TOTAL_INVESTMENT / S0;
+        double stock_ci_width = (ci_high_gbm - ci_low_gbm) * stock_only_shares;
         double portfolio_ci_width = pf_ci_high - pf_ci_low;
         double risk_reduction = (1.0 - portfolio_ci_width / stock_ci_width) * 100;
-        
-        std::cout << "Stock-only CI width:   $" << stock_ci_width << "\n";
-        std::cout << "Portfolio CI width:    $" << portfolio_ci_width << "\n";
-        std::cout << "Risk reduction:        " << std::setprecision(1) << risk_reduction << "%\n";
+    
+        std::cout << "Risk reduction     : " << std::setprecision(1) << risk_reduction << "%\n";
     }
     catch (const std::exception& e)
     {

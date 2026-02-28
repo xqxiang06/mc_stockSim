@@ -8,6 +8,7 @@
 #include <iostream>
 
 Portfolio::Portfolio(
+    double total_investment,
     double stock_S0,
     double stock_mu,
     double stock_sigma,
@@ -18,7 +19,8 @@ Portfolio::Portfolio(
     double T,
     int n_steps,
     int n_paths
-) : stock_S0(stock_S0), stock_mu(stock_mu), stock_sigma(stock_sigma),
+) : total_investment(total_investment), stock_S0(stock_S0), 
+    stock_mu(stock_mu), stock_sigma(stock_sigma),
     bond_params(bond_params), bond_maturity(bond_maturity),
     correlation(correlation), stock_weight(stock_weight),
     T(T), n_steps(n_steps), n_paths(n_paths)
@@ -37,15 +39,14 @@ Portfolio::Portfolio(
 
 void Portfolio::simulate() {
     std::cout << "\n===== Portfolio Simulation Parameters =====\n";
+    std::cout << "  Total investment: $" << total_investment << "\n";
+    std::cout << "  Allocation: " << (stock_weight*100) << "% stock / "
+            << (bond_weight*100) << "% bond\n";
     std::cout << "  Stock: S0=$" << stock_S0 << ", μ=" << stock_mu 
               << ", σ=" << stock_sigma << "\n";
     std::cout << "  Bond: r0=" << bond_params.r0 << ", κ=" << bond_params.kappa
               << ", θ=" << bond_params.theta << ", σ=" << bond_params.sigma << "\n";
-    std::cout << "  Bond maturity: " << bond_maturity << " years\n";
-    std::cout << "  Allocation: " << (stock_weight*100) << "% stock / "
-              << (bond_weight*100) << "% bond\n";
     std::cout << "  Correlation: " << correlation << "\n";
-    std::cout << "  Paths: " << n_paths << ", Steps: " << n_steps << "\n";
     
     // Initialize correlation matrix and Cholesky decomposition
     CorrelationMatrix corr_matrix(correlation);
@@ -59,13 +60,27 @@ void Portfolio::simulate() {
     final_stock_prices.resize(n_paths);
     final_bond_prices.resize(n_paths);
     
-    // Initial portfolio value (normalized to $1)
+    // CALCULATE SHARES TO BUY
+    double stock_dollars = total_investment * stock_weight;      // e.g. $6000
+    double bond_dollars = total_investment * (1 - stock_weight); // e.g. $4000
+
+    // Calculate bond scaling to real bond price ($117)
     VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
-    double initial_bond_price = temp_bond.getInitialPrice();
-    double initial_portfolio_value = stock_weight * stock_S0 + bond_weight * initial_bond_price;
+    double bond_price_L1 = temp_bond.getInitialPrice(); // on a raw scale of 1 (~$0.64)
+    double bond_scale = 117.0 / bond_price_L1;          // Scale to $117
+    double initial_bond_price = 117.0;
+
+    // Calculate actual shares to buy
+    n_stock = stock_dollars / stock_S0;                  // $6000 / $634.15 = 9.46 shares
+    n_bond = bond_dollars / initial_bond_price;          // $4000 / $117 = 34.19 bonds
+
+    std::cout << "\n=== Shares Purchased ===\n";
+    std::cout << "  Stock: $" << std::fixed << std::setprecision(2) << stock_dollars 
+              << " / $" << stock_S0 << " = " << std::setprecision(3) << n_stock << " shares\n";
+    std::cout << "  Bond:  $" << std::setprecision(2) << bond_dollars 
+              << " / $" << initial_bond_price << " = " << std::setprecision(3) << n_bond << " bonds\n";
+    std::cout << "\n  Simulating " << n_paths << " paths over " << n_steps << " steps...\n";
     
-    std::cout << "  Initial bond price: $" << initial_bond_price << "\n";
-    std::cout << "  Initial portfolio value: $" << initial_portfolio_value << "\n";
     
     // Simulate each path
     double sqrt_dt = std::sqrt(dt);
@@ -96,13 +111,14 @@ void Portfolio::simulate() {
         }
         final_stock_prices[path] = S;
         
-        // Simulate bond (Vasicek)
+        // Simulate bond (Vasicek) and scale
         VasicekBond bond(bond_params, T, n_steps, bond_maturity);
         auto bond_path = bond.simulatePath(&bond_normals);
-        final_bond_prices[path] = bond_path.back();
+        double bond_price_T = bond_path.back() * bond_scale;  // Scale to $117 basis
+        final_bond_prices[path] = bond_price_T;
         
-        // Portfolio value (maintain constant weights)
-        final_portfolio_values[path] = stock_weight * S + bond_weight * bond_path.back();
+        // Portfolio value
+        final_portfolio_values[path] = n_stock * S + n_bond * bond_price_T;
     }
 }
 
@@ -220,6 +236,7 @@ double Portfolio::percentile(const std::vector<double>& data, double p) const {
 // ==================== PortfolioCalibrator Implementation ====================
 
 Portfolio PortfolioCalibrator::calibrateFromData(
+    double total_investment,
     const std::vector<double>& stock_prices,
     const std::vector<double>& bond_yields,
     double stock_weight,
@@ -262,7 +279,8 @@ Portfolio PortfolioCalibrator::calibrateFromData(
     std::cout << "Correlation (stock-bond): " << correlation << "\n";
     
     return Portfolio(
-        stock_S0, stock_mu, stock_sigma,
+        total_investment, stock_S0, 
+        stock_mu, stock_sigma,
         bond_params, 10.0,  // Default 10-year maturity
         correlation,
         stock_weight,
