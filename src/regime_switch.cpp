@@ -401,7 +401,7 @@ void RegimeSwitching::resetStatistics() {
 void RegimeSwitching::printTransitionMatrix() const {
     std::cout << "\n║          Transition Probability Matrix              ║\n";
     std::cout << "║                   To Normal    To Crash             ║\n";
-    std::cout << "║  From Normal:       " << std::fixed << std::setprecision(2) 
+    std::cout << "║  From Normal:       " << std::fixed << std::setprecision(3) 
               << std::setw(6) << transition_matrix[0][0] << "      " 
               << std::setw(6) << transition_matrix[0][1] << "              ║\n";
     std::cout << "║  From Crash:        " 

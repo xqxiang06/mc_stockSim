@@ -19,10 +19,10 @@ Portfolio::Portfolio(
     double T,
     int n_steps,
     int n_paths
-) : total_investment(total_investment), stock_S0(stock_S0), 
-    stock_mu(stock_mu), stock_sigma(stock_sigma),
+) : stock_S0(stock_S0), stock_mu(stock_mu), stock_sigma(stock_sigma),
     bond_params(bond_params), bond_maturity(bond_maturity),
     correlation(correlation), stock_weight(stock_weight),
+    total_investment(total_investment), 
     T(T), n_steps(n_steps), n_paths(n_paths)
 {
     bond_weight = 1.0 - stock_weight;
@@ -162,17 +162,15 @@ double Portfolio::getSharpeRatio(double risk_free_rate) const {
     
     // Calculate annualized return
     VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
-    double initial_value = stock_weight * stock_S0 + 
-                          bond_weight * temp_bond.getInitialPrice();
     double mean_final = getMeanFinalValue();
-    double total_return = (mean_final / initial_value) - 1.0;
+    double total_return = (mean_final / total_investment) - 1.0;
     double annualized_return = std::pow(1.0 + total_return, 1.0 / T) - 1.0;
     
     // Calculate annualized volatility
     std::vector<double> returns;
     returns.reserve(final_portfolio_values.size());
     for (double final_val : final_portfolio_values) {
-        double ret = (final_val / initial_value) - 1.0;
+        double ret = (final_val / total_investment) - 1.0;
         double ann_ret = std::pow(1.0 + ret, 1.0 / T) - 1.0;
         returns.push_back(ann_ret);
     }

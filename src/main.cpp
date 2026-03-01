@@ -324,12 +324,8 @@ int main()
         double mean_portfolio = portfolio.getMeanFinalValue();
         double median_portfolio = portfolio.getMedianFinalValue();
         auto [pf_ci_low, pf_ci_high] = portfolio.getConfidenceInterval(0.95);
-        
-        // Calculate initial portfolio value for return calculation
-        VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
-        double initial_bond_price = temp_bond.getInitialPrice();
-        double initial_portfolio = stock_weight * S0 + (1 - stock_weight) * initial_bond_price;
         double portfolio_return = (mean_portfolio / TOTAL_INVESTMENT - 1.0) * 100;
+        double sharpe = portfolio.getSharpeRatio(r);
         
         std::cout << "\n===== Portfolio Results =====\n";
         std::cout << "Initial value      : $" << std::fixed << std::setprecision(2) << TOTAL_INVESTMENT << "\n";
@@ -337,9 +333,6 @@ int main()
         std::cout << "Median final value : $" << median_portfolio << "\n";
         std::cout << "95% CI: [$" << pf_ci_low << ", $" << pf_ci_high << "]\n";
         std::cout << "Expected return: " << portfolio_return << "%\n";
-        
-        // Sharpe ratio
-        double sharpe = portfolio.getSharpeRatio(r);
         std::cout << "Sharpe Ratio: " << std::setprecision(3) << sharpe << "\n";
         
         // Write results

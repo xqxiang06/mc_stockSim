@@ -127,7 +127,6 @@ VasicekParameters VasicekEstimator::estimateFromRates(
     double theta_est = mean(rates);
     
     // Estimate kappa using autocorrelation
-    double r_mean = mean(rates);
     double var_r = variance(rates);
     double acov1 = autocovariance(rates, 1);
     
