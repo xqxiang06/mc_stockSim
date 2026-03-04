@@ -7,79 +7,50 @@ A C++ stock price simulator based on stochastic processes (Geometric Brownian mo
 
 ### 1. Geometric Brownian Motion (GBM)
 
-The baseline model assumes continuous, log-normally distributed price changes with constant drift and volatility.
-
-```
-dS = μS dt + σS dW
-```
-
-In log-space (used for simulation stability):
+Baseline model with constant drift and volatility, log-normally distributed price changes.
 
 ```
 d(ln S) = (μ − σ²/2) dt + σ dW
 ```
 
-`μ` and `σ` are estimated from historical daily log returns and annualized using 252 trading days.
-
-#### Simulation Results
-   
-![Real NVIDIA vs Monte Carlo GBM](pic/simulate_path.png)
-   
-*Figure 1: Comparison of real NVIDIA stock prices (past 6 months) vs Monte Carlo GBM simulation*
-
 ---
 
 ### 2. Jump Diffusion (Merton Model)
 
-Extends GBM with a compound Poisson process to capture sudden, large price moves that pure diffusion cannot explain — earnings surprises, flash crashes, or macro shocks.
+Extends GBM with a compound Poisson process to capture sudden large price moves.
 
 ```
 d(ln S) = (μ − σ²/2 − λκ) dt + σ dW + J dN
 ```
 
-| Component | Description |
-|-----------|-------------|
-| `N ~ Poisson(λ)` | Number of jumps per unit time |
-| `J ~ N(μ_J, σ_J²)` | Log-size of each jump |
-| `κ = E[eʲ − 1]` | Expected percentage price change per jump; used to correct the drift so the mean path is preserved |
-| `σ_smooth` | Volatility estimated from non-jump returns only |
-
-**Calibration** separates jumps from normal moves using a Z-score threshold on daily log returns. Days exceeding the threshold (default 2.5σ) are classified as jumps; the remaining days contribute to `σ_smooth`. Jump frequency `λ`, mean size `μ_J`, and jump volatility `σ_J` are estimated directly from the classified jump returns.
+Jumps are calibrated from historical daily log returns using a Z-score threshold (default 2.5σ). 
 
 ---
 
 ### 3. Regime-Switching (Hamilton Model)
 
-Models the market as alternating between two latent states — **Normal** and **Crash** — each with its own drift and volatility, governed by a first-order Markov chain.
+Models the market as alternating between two latent states — **Normal** and **Crash** — each with its own drift and volatility, governed by a first-order Markov chain. States are identified by K-means clustering on rolling volatility.
+
+---
+
+### 4. Portfolio Simulation (60/40 Stock + Bond)
+Combines a stock position (GBM) with a bond position priced using the **Vasicek interest rate model**, allocated at a configurable stock/bond split (default 60/40).
 
 ```
-Z_t ∈ {Normal, Crash}       (hidden regime)
-
-dS/S | Z_t = i  ~  GBM(μ_i, σ_i)
-
-Transition matrix P:
-    ┌                        ┐
-P = │  1 − p_NC      p_NC    │   (from Normal)
-    │  p_CN      1 − p_CN    │   (from Crash)
-    └                        ┘
+Bond price: P(t,T) = A(t,T) · e^(−B(t,T)·r_t)
+r_t follows: dr = κ(θ − r) dt + σ_r dW
 ```
+---
 
-**Stationary distribution** (long-run fraction of time in each regime):
+## Simulation Results
 
-```
-π_Normal = p_CN / (p_NC + p_CN)
-π_Crash  = p_NC / (p_NC + p_CN)
-```
+![Simulation of Final Price Distributions](pic/price_distributions.png)
 
-**Calibration pipeline:**
-
-1. Compute daily log returns from historical prices.
-2. Compute a rolling-window annualized volatility series.
-3. Run K-means clustering (k = 2) on the volatility series to assign each day to Normal or Crash.
-4. Estimate `μ_i` and `σ_i` per regime from the classified returns.
-5. Count transitions in the regime sequence to estimate `p_NC` and `p_CN`.
-
-A longer lookback window (default 252 days) is used for regime calibration compared to jump/GBM estimation (126 days), giving the clustering algorithm better separation between the two volatility clusters.
+*Figure 1: Final price distributions across all four models from simulation*
+   
+![Real NVIDIA vs Monte Carlo GBM](pic/simulate_path.png)
+   
+*Figure 2: Comparison of real NVIDIA stock prices (past 6 months) vs Monte Carlo GBM simulation*
 
 ---
 
@@ -87,19 +58,11 @@ A longer lookback window (default 252 days) is used for regime calibration compa
 
 European call and put options are priced under the **risk-neutral measure** using Monte Carlo simulation and compared against analytical Black-Scholes prices.
 
-Under the risk-neutral measure, `μ` is replaced by the risk-free rate `r`, and the drift compensation for jumps is applied identically:
-
-```
-d(ln S) = (r − σ²/2 − λκ) dt + σ dW + J dN
-```
-
 The option value is the discounted expected payoff:
 
 ```
 V₀ = e^(−rT) · E^Q[ payoff(S_T) ]
 ```
-
-The **jump premium** — the percentage by which the jump-diffusion price exceeds the Black-Scholes price — quantifies the market's compensation for tail risk that a pure-diffusion model ignores.
 
 ---
 
@@ -114,7 +77,7 @@ The **jump premium** — the percentage by which the jump-diffusion price exceed
 
 ---
 
-## Clone
+## Setup
 
 ```bash
 git clone https://github.com/xqxiang06/mc_stockSim.git
@@ -177,9 +140,4 @@ All user-facing parameters live at the top of `main()` in `main.cpp`:
 | `T` | 0.5 | Simulation horizon in years |
 | `jump_threshold` | 2.5 | Z-score cutoff for classifying jumps |
 | `r` | 0.045 | Risk-free rate for option pricing |
-
----
-
-## Output Summary
-
-A typical run prints calibrated parameters for all three models, per-model statistics (mean, median, 95% confidence interval, expected return), regime transition matrices and stationary distributions, and option prices with jump premiums. All numerical results are also written to the CSV files listed in the project structure above.
+| `stock_weight` | 0.6 | Portfolio stock allocation |
