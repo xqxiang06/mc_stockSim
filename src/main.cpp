@@ -103,7 +103,7 @@ int main()
             throw std::runtime_error("Cannot write mc_results_gbm.csv");
         }
 
-        out_gbm << "path_id, final_price\n";
+        out_gbm << "path_id,final_price\n";
         const auto& final_prices_gbm = mc_gbm.getFinalPrices(); // get final price
         for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_gbm.size()); ++i)
         {
@@ -117,7 +117,7 @@ int main()
             throw std::runtime_error("Cannot write mc_results_jump.csv");
         }
 
-        out_jump << "path_id, final_price\n";
+        out_jump << "path_id,final_price\n";
         const auto& final_prices_jump = mc_jump.getFinalPrices();
         for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_jump.size()); ++i)
         {
@@ -200,7 +200,7 @@ int main()
             throw std::runtime_error("Cannot write mc_results_regime.csv");
         }
         
-        out_regime << "path_id, final_price\n";
+        out_regime << "path_id,final_price\n";
         for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_regime.size()); ++i) {
             out_regime << i << "," << final_prices_regime[i] << "\n";
         }
