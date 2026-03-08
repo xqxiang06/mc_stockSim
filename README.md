@@ -44,9 +44,9 @@ r_t follows: dr = κ(θ − r) dt + σ_r dW
 
 ## Simulation Results
 
-![Simulation of Final Price Distributions](pic/price_distributions.png)
+![Simulation of Final Price Distributions](pic/StockModelCompar.png)
 
-*Figure 1: Final price distributions across all four models from simulation*
+*Figure 1: Final stock price distributions across models from simulation*
    
 ![Real NVIDIA vs Monte Carlo GBM](pic/simulate_path.png)
    
