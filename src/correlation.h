@@ -5,6 +5,7 @@
 #include <array>
 #include <stdexcept>
 #include <cmath>
+#include <tuple>
 
 /**
  * Correlation utilities for multi-asset simulation
@@ -17,41 +18,42 @@
 class CorrelationMatrix {
 public:
     /**
-     * 2x2 correlation matrix (for stock-bond portfolio)
-     * [ 1.0   ρ   ]        W1 & W2's own variance is 1
-     * [  ρ   1.0  ]        Cov(W1, W2) = ρ
+     * 3x3 correlation matrix (for 3 fund portfolio)
+     * {1.0,  0.75, -0.2},  // US Stock:    self, international, bond
+     * {0.75, 1.0,  -0.1},  // Intl Stock:  US, self, bond
+     * {-0.2, -0.1,  1.0}   // Bond:        US, international, self
+     * used for example
      */                     
-    explicit CorrelationMatrix(double rho);
+    explicit CorrelationMatrix(const std::vector<std::vector<double>> &corr_matrix);
     
     /**
-     * Generate a pair of correlated standard normals
+     * Generate three correlated standard normals from three independent ones
      * @param Z1 Independent N(0,1) #1
      * @param Z2 Independent N(0,1) #2
-     * @return [W1, W2] correlated normals
+     * @param Z3                        = normal_dist(rng);
+     * @return [W1, W2, W3] correlated normals
      */
-    std::array<double, 2> generateCorrelated(double Z1, double Z2) const;
+    std::tuple<double, double, double> generateCorrelated(double Z1, double Z2, double Z3) const;
     
     /**
      * Get the correlation coefficient
      */
-    double getCorrelation() const { return rho; }
-    
-    /**
-     * Get the Cholesky decomposition matrix L (lower triangular)
-     * Stored in row-major order: [L00, L10, L11]
-     */
-    const std::array<double, 3>& getCholeskyL() const { return L; }
+    const std::vector<std::vector<double>>& getCorrelationMatrix() const { return corr_matrix; }
+
+    void printCholeskyFactors() const; // for debugging
     
 private:
-    double rho;  // Correlation coefficient [-1, 1]
+    std::vector<std::vector<double>> corr_matrix;
     
     // Cholesky decomposition for lower triangle L: such that Σ = L*L^T
-    // For 2x2: L = [ a   0  ]    where a = 1, b = ρ, c = √(1-ρ²)
-    //              [ b   c  ]
-    std::array<double, 3> L;  // [L00=a, L10=b, L11=c]
+    // for 3 * 3
+    // L = [ L11   0    0  ]
+    //     [ L21  L22   0  ]
+    //     [ L31  L32  L33 ]
+    double L11, L21, L31, L22, L32, L33;
     
     void computeCholesky();
-    void validateCorrelation() const;
+    void validateMatrix() const;
 };
 
 
