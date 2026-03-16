@@ -13,6 +13,10 @@ CorrelationMatrix::CorrelationMatrix(const std::vector<std::vector<double>> &cor
 }
 
 void CorrelationMatrix::validateMatrix() const {
+    if (corr_matrix.size() != 3) {
+        throw std::invalid_argument("Correlation matrix must be 3x3");
+    }
+
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
             if (corr_matrix[i][j] < -1.0 || corr_matrix[i][j] > 1.0) {
@@ -21,13 +25,17 @@ void CorrelationMatrix::validateMatrix() const {
         }
     }
 
-    if (corr_matrix.size() != 3) {
-        throw std::invalid_argument("Correlation matrix must be 3x3");
-    }
-
     for (int i = 0; i < 3; ++i) {
         if (std::abs(corr_matrix[i][i] - 1.0) > 1e-6) {
             throw std::invalid_argument("Diagonal elements must be 1.0");
+        }
+    }
+
+    for (int i = 0; i < 3; ++i) {
+        for (int j = i + 1; j < 3; ++j) {
+            if (std::abs(corr_matrix[i][j] - corr_matrix[j][i]) > 1e-6) {
+                throw std::invalid_argument("Correlation Matrix must be symmetric");
+            }
         }
     }
 }
@@ -56,15 +64,22 @@ void CorrelationMatrix::computeCholesky() {
     
     // Second column of L
     // L22 = sqrt(1 - L21²)
-    L22 = std::sqrt(1.0 - L21 * L21);
+    double sqL22 = 1.0 - L21 * L21;
+    if (sqL22 <= 1e-12) {
+        throw std::invalid_argument("Correlation matrix is not positive definite (L22)");
+    }
+    L22 = std::sqrt(sqL22);
+    
     // L32 = (ρ23 - L21*L31) / L22
     L32 = (rho23 - L21 * L31) / L22;
     
     // Third column of L
     // L33 = sqrt(1 - L31² - L32²)
-    L33 = std::sqrt(1.0 - L31 * L31 - L32 * L32);
-
-    printCholeskyFactors();
+    double sqL33 = 1.0 - L31 * L31 - L32 * L32;
+    if (sqL33 <= 1e-12) {
+        throw std::invalid_argument("Correlation matrix is not positive definite (L33)");
+    }
+    L33 = std::sqrt(sqL33);
 }
 
 std::tuple<double, double, double> CorrelationMatrix::generateCorrelated(double Z1, double Z2, double Z3) const {
@@ -89,30 +104,64 @@ void CorrelationMatrix::printCholeskyFactors() const {
 
 // ==================== CorrelationEstimator Implementation ====================
 
-double CorrelationEstimator::estimateCorrelation(
+std::vector<std::vector<double>> CorrelationEstimator::estimateMatrix(
     const std::vector<double>& returns1,
-    const std::vector<double>& returns2)
+    const std::vector<double>& returns2,
+    const std::vector<double>& returns3)
 {
-    if (returns1.size() != returns2.size()) {
+    size_t n = returns1.size();
+    if (n != returns2.size() || n != returns3.size()) {
         throw std::invalid_argument("Return series must have same length");
     }
-    if (returns1.size() < 2) {
+    if (n < 2) {
         throw std::invalid_argument("Need at least 2 observations");
     }
     
-    // Pearson correlation: ρ = Cov(X,Y) / (σ_X * σ_Y)
-    double cov = covariance(returns1, returns2);
-    double std1 = stddev(returns1);
-    double std2 = stddev(returns2);
-    
-    if (std1 < 1e-10 || std2 < 1e-10) {
-        return 0.0;  // One series is constant
+    // Pass 1: compute means
+    double mu0 = mean(returns1);
+    double mu1 = mean(returns2);
+    double mu2 = mean(returns3);
+
+    // Pass 2: accumulate all 6 unique cross-products in one loop
+    // Covariance matrix Sigma is symmetric, only need upper triangle:
+    //   c00 = Var(US),        c11 = Var(INTL),       c22 = Var(BOND)
+    //   c01 = Cov(US,INTL),   c02 = Cov(US,BOND),    c12 = Cov(INTL,BOND)
+    double c00=0, c11=0, c22=0;
+    double c01=0, c02=0, c12=0;
+
+    for (size_t t = 0; t < n; ++t) {
+        double d0 = returns1[t] - mu0;
+        double d1 = returns2[t] - mu1;
+        double d2 = returns3[t] - mu2;
+
+        c00 += d0 * d0;
+        c11 += d1 * d1;
+        c22 += d2 * d2;
+        c01 += d0 * d1;   // Cov(US, INTL)
+        c02 += d0 * d2;   // Cov(US, BOND)
+        c12 += d1 * d2;   // Cov(INTL, BOND)
     }
-    
-    double corr = cov / (std1 * std2);
-    
-    // Clamp to [-1, 1] to handle numerical errors
-    return std::max(-1.0, std::min(1.0, corr));
+
+    // Divide by (n-1) for sample covariance
+    double inv = 1.0 / static_cast<double>(n - 1);
+    c00 *= inv;  c11 *= inv;  c22 *= inv;
+    c01 *= inv;  c02 *= inv;  c12 *= inv;
+
+    // Step 3: normalize Sigma -> R using rho_ij = Cov(i,j) / (sig_i * sig_j)
+    double sig0 = std::sqrt(c00);
+    double sig1 = std::sqrt(c11);
+    double sig2 = std::sqrt(c22);
+
+    auto safeCorr = [](double cov, double si, double sj) -> double {
+        if (si < 1e-10 || sj < 1e-10) return 0.0;
+        return std::max(-1.0, std::min(1.0, cov / (si * sj)));
+    };
+
+    return {
+        { 1.0,                        safeCorr(c01, sig0, sig1), safeCorr(c02, sig0, sig2) },
+        { safeCorr(c01, sig0, sig1),  1.0,                       safeCorr(c12, sig1, sig2) },
+        { safeCorr(c02, sig0, sig2),  safeCorr(c12, sig1, sig2), 1.0                       }
+    };
 }
 
 double CorrelationEstimator::mean(const std::vector<double>& data) {

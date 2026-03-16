@@ -36,7 +36,7 @@ public:
     std::tuple<double, double, double> generateCorrelated(double Z1, double Z2, double Z3) const;
     
     /**
-     * Get the correlation coefficient
+     * Get the correlation matrix
      */
     const std::vector<std::vector<double>>& getCorrelationMatrix() const { return corr_matrix; }
 
@@ -63,14 +63,16 @@ private:
 class CorrelationEstimator {
 public:
     /**
-     * Estimate Pearson correlation between two return series
-     * @param returns1 Log returns of asset 1
-     * @param returns2 Log returns of asset 2
-     * @return Correlation coefficient ∈ [-1, 1]
+     * Estimate the full 3x3 Pearson correlation matrix from three return series
+     * @param returns1 Log returns of asset 1 (US stocks)
+     * @param returns2 Log returns of asset 2 (Intl stocks)
+     * @param returns3 Log returns of asset 3 (Bonds)
+     * @return Symmetric 3x3 correlation matrix with 1s on diagonal
      */
-    static double estimateCorrelation(
+    static std::vector<std::vector<double>> estimateMatrix(
         const std::vector<double>& returns1,
-        const std::vector<double>& returns2
+        const std::vector<double>& returns2,
+        const std::vector<double>& returns3
     );
     
 private:
