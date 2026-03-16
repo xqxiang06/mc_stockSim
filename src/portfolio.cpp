@@ -9,47 +9,53 @@
 
 Portfolio::Portfolio(
     double total_investment,
-    double stock_S0,
-    double stock_mu,
-    double stock_sigma,
+    double us_stock_S0, double us_stock_mu, double us_stock_sigma,
+    double intl_stock_S0, double intl_stock_mu, double intl_stock_sigma,
     const VasicekParameters& bond_params,
     double bond_maturity,
-    double correlation,
-    double stock_weight,
+    double us_stock_weight, double intl_stock_weight, double bond_weight,
+    const std::vector<std::vector<double>>& corr_matrix,
     double T,
     int n_steps,
     int n_paths
-) : stock_S0(stock_S0), stock_mu(stock_mu), stock_sigma(stock_sigma),
+) : us_stock_S0(us_stock_S0), us_stock_mu(us_stock_mu), us_stock_sigma(us_stock_sigma),
+    intl_stock_S0(intl_stock_S0), intl_stock_mu(intl_stock_mu), intl_stock_sigma(intl_stock_sigma),
     bond_params(bond_params), bond_maturity(bond_maturity),
-    correlation(correlation), stock_weight(stock_weight),
-    total_investment(total_investment), 
+    total_investment(total_investment),
+    us_stock_weight(us_stock_weight),
+    intl_stock_weight(intl_stock_weight),
+    bond_weight(bond_weight),
+    corr_matrix(corr_matrix),
     T(T), n_steps(n_steps), n_paths(n_paths)
 {
-    bond_weight = 1.0 - stock_weight;
     dt = T / n_steps;
     
     // Validate inputs
-    if (stock_weight < 0.0 || stock_weight > 1.0) {
-        throw std::invalid_argument("Stock weight must be in [0, 1]");
+    double weight_sum = us_stock_weight + intl_stock_weight + bond_weight;
+    if (std::abs(weight_sum - 1.0) > 1e-6) {
+        throw std::invalid_argument("Portfolio weights must sum to 1.0");
     }
-    if (correlation < -1.0 || correlation > 1.0) {
-        throw std::invalid_argument("Correlation must be in [-1, 1]");
+    if (us_stock_weight < 0.0 || intl_stock_weight < 0.0 || bond_weight < 0.0) {
+        throw std::invalid_argument("Weights must be non-negative");
     }
 }
 
 void Portfolio::simulate() {
     std::cout << "\n===== Portfolio Simulation Parameters =====\n";
     std::cout << "  Total investment: $" << total_investment << "\n";
-    std::cout << "  Allocation: " << (stock_weight*100) << "% stock / "
-            << (bond_weight*100) << "% bond\n";
-    std::cout << "  Stock: S0=$" << stock_S0 << ", μ=" << stock_mu 
-              << ", σ=" << stock_sigma << "\n";
+    std::cout << "  Allocation: \n"; 
+    std::cout << "    US Stocks:      " << (us_stock_weight * 100) << "%\n"
+              << "    Intl Stocks:    " << (intl_stock_weight * 100) << "%\n"
+              << "    Bonds:          " << (bond_weight*100) << "%\n";
+    std::cout << "  US Stock:   S0=$" << us_stock_S0 << ", μ=" << us_stock_mu 
+              << ", σ=" << us_stock_sigma << "\n";
+    std::cout << "  Intl Stock: S0=$" << intl_stock_S0 << ", μ=" << intl_stock_mu 
+              << ", σ=" << intl_stock_sigma << "\n";
     std::cout << "  Bond: r0=" << bond_params.r0 << ", κ=" << bond_params.kappa
               << ", θ=" << bond_params.theta << ", σ=" << bond_params.sigma << "\n";
-    std::cout << "  Correlation: " << correlation << "\n";
     
     // Initialize correlation matrix and Cholesky decomposition
-    CorrelationMatrix corr_matrix(correlation);
+    CorrelationMatrix corr3d(corr_matrix);
     
     // Initialize RNG
     std::mt19937 rng(42);
@@ -57,12 +63,14 @@ void Portfolio::simulate() {
     
     // Pre-allocate result vectors
     final_portfolio_values.resize(n_paths);
-    final_stock_prices.resize(n_paths);
+    final_us_stock_prices.resize(n_paths);
+    final_intl_stock_prices.resize(n_paths);
     final_bond_prices.resize(n_paths);
     
-    // CALCULATE SHARES TO BUY
-    double stock_dollars = total_investment * stock_weight;      // e.g. $6000
-    double bond_dollars = total_investment * (1 - stock_weight); // e.g. $4000
+    // Calculate dollar allocations
+    double us_stock_dollars = total_investment * us_stock_weight;
+    double intl_stock_dollars = total_investment * intl_stock_weight;
+    double bond_dollars = total_investment * bond_weight;
 
     // Calculate bond scaling to real bond price ($117)
     VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
@@ -70,46 +78,62 @@ void Portfolio::simulate() {
     double bond_scale = 117.0 / bond_price_L1;          // Scale to $117
     double initial_bond_price = 117.0;
 
-    // Calculate actual shares to buy
-    n_stock = stock_dollars / stock_S0;                  // $6000 / $634.15 = 9.46 shares
+    // Calculate shares to buy
+    n_us_stock = us_stock_dollars / us_stock_S0;         // $4200 / $634.15 = 6.62 shares
+    n_intl_stock = intl_stock_dollars / intl_stock_S0;   // $1800 / $78 = 23 shares
     n_bond = bond_dollars / initial_bond_price;          // $4000 / $117 = 34.19 bonds
 
     std::cout << "\n=== Shares Purchased ===\n";
-    std::cout << "  Stock: $" << std::fixed << std::setprecision(2) << stock_dollars 
-              << " / $" << stock_S0 << " = " << std::setprecision(3) << n_stock << " shares\n";
-    std::cout << "  Bond:  $" << std::setprecision(2) << bond_dollars 
-              << " / $" << initial_bond_price << " = " << std::setprecision(3) << n_bond << " bonds\n";
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "  US Stock: $" << us_stock_dollars << " / $" << us_stock_S0 
+              << " = " << n_us_stock << " shares\n";
+    std::cout << "  Intl Stock: $" << intl_stock_dollars << " / $" << intl_stock_S0 
+              << " = " << n_intl_stock << " shares\n";
+    std::cout << "  Bond:  $" << bond_dollars << " / $" << initial_bond_price 
+              << " = " << n_bond << " bonds\n";
     std::cout << "\n  Simulating " << n_paths << " paths over " << n_steps << " steps...\n";
     
     
     // Simulate each path
     double sqrt_dt = std::sqrt(dt);
-    double stock_drift = (stock_mu - 0.5 * stock_sigma * stock_sigma) * dt;
-    
+    double us_stock_drift = (us_stock_mu - 0.5 * us_stock_sigma * us_stock_sigma) * dt;
+    double intl_stock_drift = (intl_stock_mu - 0.5 * intl_stock_sigma * intl_stock_sigma) * dt;
+
     for (int path = 0; path < n_paths; ++path) {
         // Generate correlated normals for this path
-        std::vector<double> stock_normals(n_steps);
+        std::vector<double> us_stock_normals(n_steps);
+        std::vector<double> intl_stock_normals(n_steps);
         std::vector<double> bond_normals(n_steps);
         
         for (int step = 0; step < n_steps; ++step) {
             // Generate independent standard normals
             double Z1 = normal_dist(rng);
             double Z2 = normal_dist(rng);
+            double Z3 = normal_dist(rng);
             
             // Apply correlation via Cholesky
-            auto [W1, W2] = corr_matrix.generateCorrelated(Z1, Z2);
+            auto [W1, W2, W3] = corr3d.generateCorrelated(Z1, Z2, Z3);
             
-            stock_normals[step] = W1;
-            bond_normals[step] = W2;
+            us_stock_normals[step] = W1;
+            intl_stock_normals[step] = W2;
+            bond_normals[step] = W3;
         }
         
-        // Simulate stock (GBM)
-        double S = stock_S0;
+        // Simulate US stock (GBM)
+        double S_us = us_stock_S0;
         for (int step = 0; step < n_steps; ++step) {
-            double dW = stock_normals[step] * sqrt_dt;
-            S *= std::exp(stock_drift + stock_sigma * dW);
+            double dW = us_stock_normals[step] * sqrt_dt;
+            S_us *= std::exp(us_stock_drift + us_stock_sigma * dW);
         }
-        final_stock_prices[path] = S;
+        final_us_stock_prices[path] = S_us;
+
+        // Simulate International stock (GBM)
+        double S_intl = intl_stock_S0;
+        for (int step = 0; step < n_steps; ++step) {
+            double dW = intl_stock_normals[step] * sqrt_dt;
+            S_intl *= std::exp(intl_stock_drift + intl_stock_sigma * dW);
+        }
+        final_intl_stock_prices[path] = S_intl;
         
         // Simulate bond (Vasicek) and scale
         VasicekBond bond(bond_params, T, n_steps, bond_maturity);
@@ -118,7 +142,7 @@ void Portfolio::simulate() {
         final_bond_prices[path] = bond_price_T;
         
         // Portfolio value
-        final_portfolio_values[path] = n_stock * S + n_bond * bond_price_T;
+        final_portfolio_values[path] = n_us_stock * S_us + n_intl_stock * S_intl + n_bond * bond_price_T;
     }
 }
 
@@ -143,11 +167,18 @@ std::pair<double, double> Portfolio::getConfidenceInterval(double confidence) co
     return {lower, upper};
 }
 
-double Portfolio::getMeanStockFinalPrice() const {
-    if (final_stock_prices.empty()) return 0.0;
-    double sum = std::accumulate(final_stock_prices.begin(), 
-                                  final_stock_prices.end(), 0.0);
-    return sum / final_stock_prices.size();
+double Portfolio::getMeanUSStockFinalPrice() const {
+    if (final_us_stock_prices.empty()) return 0.0;
+    double sum = std::accumulate(final_us_stock_prices.begin(), 
+                                  final_us_stock_prices.end(), 0.0);
+    return sum / final_us_stock_prices.size();
+}
+
+double Portfolio::getMeanIntlStockFinalPrice() const {
+    if (final_intl_stock_prices.empty()) return 0.0;
+    double sum = std::accumulate(final_intl_stock_prices.begin(), 
+                                  final_intl_stock_prices.end(), 0.0);
+    return sum / final_intl_stock_prices.size();
 }
 
 double Portfolio::getMeanBondFinalPrice() const {
@@ -199,13 +230,14 @@ void Portfolio::writeResultsToCSV(const std::string& filename) const {
         throw std::runtime_error("Cannot write to " + filename);
     }
     
-    out << "path_id,portfolio_value,stock_price,bond_price\n";
+    out << "path_id,portfolio_value,us_stock_price, intl_stock_price,bond_price\n";
     
     size_t n = std::min(size_t(1000), final_portfolio_values.size());
     for (size_t i = 0; i < n; ++i) {
         out << i << "," 
             << final_portfolio_values[i] << ","
-            << final_stock_prices[i] << ","
+            << final_us_stock_prices[i] << ","
+            << final_intl_stock_prices[i] << ","
             << final_bond_prices[i] << "\n";
     }
     
@@ -228,60 +260,4 @@ double Portfolio::percentile(const std::vector<double>& data, double p) const {
     
     double weight = index - lower_idx;
     return sorted_data[lower_idx] * (1 - weight) + sorted_data[upper_idx] * weight;
-}
-
-
-// ==================== PortfolioCalibrator Implementation ====================
-
-Portfolio PortfolioCalibrator::calibrateFromData(
-    double total_investment,
-    const std::vector<double>& stock_prices,
-    const std::vector<double>& bond_yields,
-    double stock_weight,
-    double T,
-    int n_steps,
-    int n_paths,
-    int trading_days_per_year)
-{
-    if (stock_prices.size() != bond_yields.size()) {
-        throw std::invalid_argument("Stock prices and bond yields must have same length");
-    }
-    
-    // Estimate stock parameters
-    auto [stock_mu, stock_sigma] = ParameterEstimator::estimateFromPrices(
-        stock_prices, trading_days_per_year);
-    double stock_S0 = stock_prices.back();
-    
-    // Estimate bond parameters
-    VasicekParameters bond_params = VasicekEstimator::estimateFromRates(
-        bond_yields, 1.0 / trading_days_per_year);
-    
-    // Estimate correlation
-    auto stock_returns = ParameterEstimator::computeLogReturns(stock_prices);
-    
-    // For bonds, compute "returns" as -Δy (yield changes negatively correlate with price)
-    std::vector<double> bond_returns;
-    bond_returns.reserve(bond_yields.size() - 1);
-    for (size_t i = 1; i < bond_yields.size(); ++i) {
-        bond_returns.push_back(-(bond_yields[i] - bond_yields[i-1]));
-    }
-    
-    double correlation = CorrelationEstimator::estimateCorrelation(
-        stock_returns, bond_returns);
-    
-    std::cout << "\n===== Calibrated Portfolio Parameters =====\n";
-    std::cout << "Stock: μ=" << stock_mu << ", σ=" << stock_sigma 
-              << ", S0=$" << stock_S0 << "\n";
-    std::cout << "Bond: κ=" << bond_params.kappa << ", θ=" << bond_params.theta
-              << ", σ=" << bond_params.sigma << ", r0=" << bond_params.r0 << "\n";
-    std::cout << "Correlation (stock-bond): " << correlation << "\n";
-    
-    return Portfolio(
-        total_investment, stock_S0, 
-        stock_mu, stock_sigma,
-        bond_params, 10.0,  // Default 10-year maturity
-        correlation,
-        stock_weight,
-        T, n_steps, n_paths
-    );
 }

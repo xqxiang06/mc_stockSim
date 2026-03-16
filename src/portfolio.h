@@ -8,12 +8,12 @@
 #include <utility>
 
 /**
- * Two-Asset Portfolio (Stock + Bond)
+ * 3 Fund Portfolio (US Stock + Intl Stock + Bond)
  * 
  * Simulates a portfolio with:
  * - Stock following GBM/Jump/Regime-switching
  * - Bond following Vasicek interest rate model
- * - Fixed allocation (e.g., 60% stock / 40% bond)
+ * - Fixed allocation (e.g., 42% USstock / 18% Intlstock / 40% bond)
  * - Correlated dynamics via correlation matrix
  */
 
@@ -22,13 +22,18 @@ public:
     // constructor
     Portfolio(
         double total_investment,
-        double stock_S0, // intital stock price
-        double stock_mu, // stock drift
-        double stock_sigma, // stock volatility
+        double us_stock_S0, // intial stock price
+        double us_stock_mu, // stock drift
+        double us_stock_sigma, // stock volatility
+        double intl_stock_S0,
+        double intl_stock_mu,
+        double intl_stock_sigma,
         const VasicekParameters& bond_params, //vasicek parameters for bond
         double bond_maturity, // bond maturity in years
-        double correlation, // stock-bond return correlation
-        double stock_weight, // portfolio weight in stock (0-1)
+        double us_stock_weight, // portfolio weight (0-1)
+        double intl_stock_weight,
+        double bond_weight,
+        const std::vector<std::vector<double>> &corr_matrix, // stocks-bond return correlation
         double T, // simulation horizon (years)
         int n_steps, // numbers of time steps
         int n_paths // monte carlo path
@@ -42,8 +47,9 @@ public:
     double getMedianFinalValue() const;
     std::pair<double, double> getConfidenceInterval(double confidence = 0.95) const;
     
-    // Get final prices
-    double getMeanStockFinalPrice() const;
+    // Get component final prices
+    double getMeanUSStockFinalPrice() const;
+    double getMeanIntlStockFinalPrice() const;
     double getMeanBondFinalPrice() const;
     
     // Get final portfolio values across all paths
@@ -59,18 +65,17 @@ public:
     
 private:
     // Asset parameters
-    double stock_S0;
-    double stock_mu;
-    double stock_sigma;
+    double us_stock_S0, us_stock_mu, us_stock_sigma;
+    double intl_stock_S0, intl_stock_mu, intl_stock_sigma;
     VasicekParameters bond_params;
     double bond_maturity;
     
     // Portfolio parameters
-    double correlation;
-    double stock_weight;
-    double bond_weight;
     double total_investment;
-    double n_stock;  // Actual number of shares
+    double us_stock_weight, intl_stock_weight, bond_weight;
+    std::vector<std::vector<double>> corr_matrix;
+    double n_us_stock;
+    double n_intl_stock;  // Actual number of shares
     double n_bond;   // Actual number of bonds
     
     // Simulation parameters
@@ -81,36 +86,12 @@ private:
     
     // Results storage
     std::vector<double> final_portfolio_values;
-    std::vector<double> final_stock_prices;
+    std::vector<double> final_us_stock_prices;
+    std::vector<double> final_intl_stock_prices;
     std::vector<double> final_bond_prices;
     
     // Helper for percentile calculation
     double percentile(const std::vector<double>& data, double p) const;
-};
-
-//-------------------------------------------------------------------------------------------
-
-// Portfolio calibrator - estimates all parameters from historical data
-class PortfolioCalibrator {
-public:
-    /**
-     * Calibrate two-asset portfolio from stock prices and bond yields
-     * @param stock_prices Historical stock prices
-     * @param bond_yields Historical short-term interest rates (e.g., 3-month T-bill)
-     * @param stock_weight Target stock allocation
-     * @param trading_days_per_year 252 for daily data
-     * @return Configured Portfolio object
-     */
-    static Portfolio calibrateFromData(
-        double total_investment,
-        const std::vector<double>& stock_prices,
-        const std::vector<double>& bond_yields,
-        double stock_weight,
-        double T,
-        int n_steps,
-        int n_paths,
-        int trading_days_per_year = 252
-    );
 };
 
 #endif
