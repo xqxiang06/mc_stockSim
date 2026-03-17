@@ -18,19 +18,17 @@ int main()
         const std::string csv_file = "data/VOO_STOCK_DATA.csv";
 
         const int trading_days_per_year = 252;
-        int lookback_days = 126;     // last half year for estimation
+        int lookback_days = 252;     // last year for estimation
         int n_paths = 1000000;       // Monte Carlo paths
-        int n_steps = 126;           // half year simulation
-        double T = 0.5;              // year(s)
+        int n_steps = 252;           // whole year simulation
+        double T = 1.0;              // year(s)
         double jump_threshold = 2.5; // Z-score threshold for identifying jumps
-        int regime_lookback_days = 252; // 1 year for regime calibration (more data → better cluster separation)
 
         std::stringstream null_stream;
         std::streambuf* old_cout = std::cout.rdbuf();
 
-        /* Read real NVIDIA prices */
+        /* Read real historical prices */
         std::vector<double> prices = readLastNPrices(csv_file, lookback_days);
-        std::vector<double> regime_prices = readLastNPrices(csv_file, regime_lookback_days); // longer history for regime calibration
 
         double S0 = prices.back(); // last observed price
 
@@ -131,7 +129,7 @@ int main()
         
         // Create regime model (calibrates all 6 parameters from real data)
         // calibrateFromData() prints internally: regime counts, μ/σ per regime, P(N→C), P(C→N)
-        MarketData regime_data(regime_prices);
+        MarketData regime_data(prices);
         RegimeConfig regime_cfg = RegimeConfig::calibrateFromData(regime_data, 20);
         RegimeSwitching regime_model(regime_cfg);
 
@@ -286,6 +284,20 @@ int main()
         // ========================= PORTFOLIO SIMULATION =========================
         std::cout << "\n\n===== PORTFOLIO SIMULATION (Stock/Bond) =====\n";
         
+        // Load US Total Stock Market data
+        std::vector<double> us_stock_prices = readLastNPrices("data/VOO_STOCK_DATA.csv", lookback_days);
+        auto [us_stock_mu, us_stock_sigma] = ParameterEstimator::estimateFromPrices(us_stock_prices, trading_days_per_year);
+        double us_S0 = us_stock_prices.back();
+        std::cout << "\nUS Stock (VOO) Parameters:\n";
+        std::cout << "  S0 = $" << us_S0 << ", μ = " << us_stock_mu << ", σ = " << us_stock_sigma << "\n";
+
+        // Load Intl Stock Market Data
+        std::vector<double> intl_stock_prices = readLastNPrices("data/VXUS_STOCK_DATA.csv", lookback_days);
+        auto [intl_stock_mu, intl_stock_sigma] = ParameterEstimator::estimateFromPrices(intl_stock_prices, trading_days_per_year);
+        double intl_S0 = intl_stock_prices.back();
+        std::cout << "International Stock (VXUS) Parameters:\n";
+        std::cout << "  S0 = $" << intl_S0 << ", μ = " << intl_stock_mu << ", σ = " << intl_stock_sigma << "\n";
+
         // Manual bond parameters
         VasicekParameters bond_params(
             0.15,   // κ (mean reversion speed)
@@ -294,14 +306,21 @@ int main()
             0.045   // r0 (initial rate 4.5%)
         );
         
-        double bond_maturity = 10.0;        // 10-year bond
-        double correlation = -0.2;          // Stock-bond correlation (negative = diversification)
-        double stock_weight = 0.60;         // 60% stock / 40% bond
-        
+        double bond_maturity = 10.0;
+        double us_stock_weight = 0.60;  // Three-fund allocations
+        double intl_stock_weight = 0.20;        
+        double bond_weight = 0.20;
+
+        std::vector<std::vector<double>> corr_matrix = {
+            {1.0,  0.75, -0.2},  // US Stock:    corr with self, international, bond
+            {0.75, 1.0,  -0.1},  // Intl Stock:  corr with US, self, bond
+            {-0.2, -0.1,  1.0}   // Bond:        corr with US, international, self
+        };
+
         std::cout << "\nPortfolio Configuration:\n";
-        std::cout << "  Allocation: " << (stock_weight * 100) << "% stock / " 
-                  << ((1 - stock_weight) * 100) << "% bond\n";
-        std::cout << "  Stock-Bond Correlation: " << correlation << "\n";
+        std::cout << "  Allocation: " << (us_stock_weight * 100) << "% US stock / " 
+                  << ((intl_stock_weight) * 100) << "% Intl stock /"
+                  << ((bond_weight) * 100) << "% Bond\n";
         std::cout << "  Bond: " << bond_maturity << "-year maturity\n";
         std::cout << "  Bond rate: " << (bond_params.r0 * 100) << "%\n";
         
@@ -309,12 +328,13 @@ int main()
 
         // Create and run portfolio
         Portfolio portfolio(
-            TOTAL_INVESTMENT, S0, 
-            mu, sigma,                  // Stock params (already calibrated above)
-            bond_params,                // Bond params (manual)
+            TOTAL_INVESTMENT,
+            us_S0, us_stock_mu, us_stock_sigma,
+            intl_S0, intl_stock_mu, intl_stock_sigma,
+            bond_params,
             bond_maturity,
-            correlation,
-            stock_weight,
+            us_stock_weight, intl_stock_weight, bond_weight,
+            corr_matrix,
             T, n_steps, n_paths
         );
         
@@ -347,10 +367,10 @@ int main()
         }
         
         // Scale stock and bond && Risk reduction rate
-        double stock_only_shares = TOTAL_INVESTMENT / S0;
-        double stock_ci_width = (ci_high_gbm - ci_low_gbm) * stock_only_shares;
+        double us_stock_only_shares = TOTAL_INVESTMENT / us_S0;
+        double us_stock_ci_width = (ci_high_gbm - ci_low_gbm) * us_stock_only_shares;
         double portfolio_ci_width = pf_ci_high - pf_ci_low;
-        double risk_reduction = (1.0 - portfolio_ci_width / stock_ci_width) * 100;
+        double risk_reduction = (1.0 - portfolio_ci_width / us_stock_ci_width) * 100;
     
         std::cout << "Risk reduction     : " << std::setprecision(1) << risk_reduction << "%\n";
     }
