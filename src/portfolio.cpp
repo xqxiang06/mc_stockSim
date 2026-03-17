@@ -72,16 +72,18 @@ void Portfolio::simulate() {
     double intl_stock_dollars = total_investment * intl_stock_weight;
     double bond_dollars = total_investment * bond_weight;
 
-    // Calculate bond scaling to real bond price ($117)
+    // // Bond price: use model's raw zero-coupon price directly (face value = $1)
     VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
-    double bond_price_L1 = temp_bond.getInitialPrice(); // on a raw scale of 1 (~$0.64)
-    double bond_scale = 117.0 / bond_price_L1;          // Scale to $117
-    double initial_bond_price = 117.0;
+    double initial_bond_price = temp_bond.getInitialPrice(); // [0,1]
+    double bond_scale = 1.0;
 
     // Calculate shares to buy
     n_us_stock = us_stock_dollars / us_stock_S0;         // $4200 / $634.15 = 6.62 shares
     n_intl_stock = intl_stock_dollars / intl_stock_S0;   // $1800 / $78 = 23 shares
-    n_bond = bond_dollars / initial_bond_price;          // $4000 / $117 = 34.19 bonds
+    n_bond = bond_dollars / initial_bond_price;          // $4000 / units of $1 face-value bonds
+
+    // Display only — convert to ETF-like price for printing
+    double display_scale = 74.0 / initial_bond_price;
 
     std::cout << "\n=== Shares Purchased ===\n";
     std::cout << std::fixed << std::setprecision(2);
@@ -91,6 +93,8 @@ void Portfolio::simulate() {
               << " = " << n_intl_stock << " shares\n";
     std::cout << "  Bond:  $" << bond_dollars << " / $" << initial_bond_price 
               << " = " << n_bond << " bonds\n";
+    std::cout << "  Bond initial price: $" << initial_bond_price * display_scale 
+              << " (ETF-scaled)\n";
     std::cout << "\n  Simulating " << n_paths << " paths over " << n_steps << " steps...\n";
     
     
@@ -192,7 +196,6 @@ double Portfolio::getSharpeRatio(double risk_free_rate) const {
     if (final_portfolio_values.empty()) return 0.0;
     
     // Calculate annualized return
-    VasicekBond temp_bond(bond_params, T, n_steps, bond_maturity);
     double mean_final = getMeanFinalValue();
     double total_return = (mean_final / total_investment) - 1.0;
     double annualized_return = std::pow(1.0 + total_return, 1.0 / T) - 1.0;
@@ -211,6 +214,7 @@ double Portfolio::getSharpeRatio(double risk_free_rate) const {
     for (double ret : returns) {
         var_sum += (ret - mean_ret) * (ret - mean_ret);
     }
+    if (returns.size() < 2) return 0.0;
     double volatility = std::sqrt(var_sum / (returns.size() - 1));
     
     if (volatility < 1e-10) return 0.0;

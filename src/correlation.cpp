@@ -80,6 +80,8 @@ void CorrelationMatrix::computeCholesky() {
         throw std::invalid_argument("Correlation matrix is not positive definite (L33)");
     }
     L33 = std::sqrt(sqL33);
+
+    printCholeskyFactors(); // show for debugging
 }
 
 std::tuple<double, double, double> CorrelationMatrix::generateCorrelated(double Z1, double Z2, double Z3) const {
