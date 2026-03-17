@@ -66,7 +66,6 @@ public:
     
 private:
     VasicekParameters params;
-    double T;              // Total time
     int n_steps;           // Number of steps
     double dt;             // Time step size
     double maturity;       // Bond maturity in years

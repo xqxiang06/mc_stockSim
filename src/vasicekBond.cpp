@@ -6,7 +6,7 @@
 VasicekBond::VasicekBond(const VasicekParameters& params,
                          double T, int n_steps,
                          double maturity)
-    : params(params), T(T), n_steps(n_steps), 
+    : params(params), n_steps(n_steps), 
       maturity(maturity), current_rate(params.r0),
       rng(std::random_device{}()), normal_dist(0.0, 1.0)
 {
@@ -31,33 +31,30 @@ std::vector<double> VasicekBond::simulatePath(const std::vector<double>* correla
     // Initial bond price
     bond_prices.push_back(bondPrice(r, maturity));
     
-    // Simulate short rate path using Euler-Maruyama discretization
-    // dr = κ(θ - r)dt + σ dW
+    // Original form: dr = κ(θ - r)dt + σ dW (Euler-Maruyama)
+    // Turn to exact discretization closed form
+    double exp_kdt = std::exp(-params.kappa * dt);
+    double mean_coef = params.theta * (1.0 - exp_kdt);
+    double var = (params.sigma * params.sigma) *
+                 (1.0 - std::exp(-2.0 * params.kappa * dt)) /
+                 (2.0 * params.kappa);
+
     for (int i = 1; i <= n_steps; ++i) {
-        double dW;
+        double Z; // standard normal
         if (correlated_normals != nullptr && i-1 < static_cast<int>(correlated_normals->size())) {
             // Use pre-generated correlated normal
-            dW = (*correlated_normals)[i-1] * std::sqrt(dt);
+            Z = (*correlated_normals)[i-1];
         } else {
             // Generate independent normal
-            dW = normal_dist(rng) * std::sqrt(dt);
+            Z = normal_dist(rng);
         }
         
-        // Euler-Maruyama step
-        double drift = params.kappa * (params.theta - r) * dt;
-        double diffusion = params.sigma * dW;
+        double mean_r = r * exp_kdt + mean_coef;
+        r = mean_r + std::sqrt(var) * Z; // Exact discretization
         
-        r += drift + diffusion;
-        
-        // Ensure rate stays non-negative (practical constraint)
-        r = std::max(r, 0.0);
-        
-        // Calculate time remaining to maturity
-        double time_to_maturity = maturity - (i * dt);
-        if (time_to_maturity < 0) {
-            time_to_maturity = 0;  // Bond has matured
-        }
-        
+        // Constant-maturity bond fund, not a single aging zero-coupon bond
+        double time_to_maturity = maturity;
+
         bond_prices.push_back(bondPrice(r, time_to_maturity));
     }
     
@@ -136,10 +133,10 @@ VasicekParameters VasicekEstimator::estimateFromRates(
     
     double kappa_est = -std::log(rho1) / dt;
     
-    // Estimate sigma from residuals
+    // Estimate sigma from residuals and kappa
     double var_dr = variance(dr);
-    // Var(dr) ≈ σ²dt
-    double sigma_est = std::sqrt(var_dr / dt);
+    double sigma_est = std::sqrt(2.0 * kappa_est * var_dr /
+                                (1.0 - std::exp(-2.0 * kappa_est * dt)));
     
     // Use last observed rate as r0
     double r0 = rates.back();
