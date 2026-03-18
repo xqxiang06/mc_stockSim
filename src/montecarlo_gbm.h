@@ -31,6 +31,7 @@ class MonteCarloGBM {
     double getMeanFinalPrice() const;
     double getMedianFinalPrice() const;
     std::pair<double, double> getConfidenceInterval(double confidence = 0.95) const;
+    static double percentile(const std::vector<double>& data, double p);
     
     // Get parameters
     double getS0() const { return S0; }
@@ -68,7 +69,6 @@ private:
     
     // Helper functions
     void generateTimeGrid();
-    double percentile(const std::vector<double>& data, double p) const;
 };
 
  

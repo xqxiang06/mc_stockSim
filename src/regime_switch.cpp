@@ -218,6 +218,53 @@ namespace {
     }
 }
 
+// Separate Regime switching Monte Carlo Simulation, between normal and crush
+void RegimeSwitching::simulate(double S0, double T, int n_steps, int n_paths) {
+    double dt = T / n_steps;
+
+    std::mt19937 gen_regime(42);
+    std::normal_distribution<double> normal_dist(0.0, 1.0);
+
+    final_prices_regime.clear();
+    final_prices_regime.reserve(n_paths);
+    resetStatistics();  // accumulate stats across all paths
+
+    for (int path = 0; path < n_paths; ++path) {
+        double S = S0;
+        reset();  // Start each path in Normal
+
+        for (int step = 0; step < n_steps; ++step) {
+            auto params = getCurrentParameters();
+            
+            double Z = normal_dist(gen_regime);
+            double drift = (params.mu - 0.5 * params.sigma * params.sigma) * dt;
+            double diffusion = params.sigma * std::sqrt(dt) * Z;
+            
+            S *= std::exp(drift + diffusion);
+            updateRegime();
+        }
+
+        final_prices_regime.push_back(S);
+    }
+}
+
+double RegimeSwitching::getMeanFinalPrice() const {
+    if (final_prices_regime.empty()) return 0.0;
+    double sum = std::accumulate(final_prices_regime.begin(),
+                                 final_prices_regime.end(), 0.0);
+    return sum / final_prices_regime.size();
+}
+
+double RegimeSwitching::getMedianFinalPrice() const {
+    return MonteCarloGBM::percentile(final_prices_regime, 0.5);
+}
+
+std::pair<double, double> RegimeSwitching::getConfidenceInterval(double confidence) const {
+    double lower_p = (1.0 - confidence) * 0.5;
+    double upper_p = 1.0 - lower_p;
+    return { MonteCarloGBM::percentile(final_prices_regime, lower_p),
+             MonteCarloGBM::percentile(final_prices_regime, upper_p) };
+}
 
 // -----------------------------Implementation of RegimeConfig::calibrateFromData-----------------------------------------
 

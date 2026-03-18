@@ -85,6 +85,9 @@ private:
     // Helper to build transition matrix from config
     void buildTransitionMatrix();
 
+    // Store simulation final prices
+    std::vector<double> final_prices_regime;
+
 public:
     // Constructor from config struct
     RegimeSwitching(
@@ -132,6 +135,13 @@ public:
     double getNormalSigma() const { return config.normal_params.sigma; }
     double getCrashMu() const { return config.crash_params.mu; }
     double getCrashSigma() const { return config.crash_params.sigma; }
+
+    // Regime simulation
+    void simulate(double S0, double T, int n_steps, int n_paths);
+    double getMeanFinalPrice() const;
+    double getMedianFinalPrice() const;
+    std::pair<double, double> getConfidenceInterval(double confidence = 0.95) const;
+    const std::vector<double>& getFinalPrices() const { return final_prices_regime; }
 };
 
 // Predefined configurations for common scenarios (examples)

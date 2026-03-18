@@ -195,7 +195,7 @@ std::pair<double, double> MonteCarloGBM::getConfidenceInterval(double confidence
     return {lower, upper};
 }
 
-double MonteCarloGBM::percentile(const std::vector<double> &data, double p) const
+double MonteCarloGBM::percentile(const std::vector<double> &data, double p)
 {
     if (data.empty())
         throw std::invalid_argument("Cannot compute percentile of empty data");

@@ -140,53 +140,19 @@ int main()
         std::cout << "\nStationary Distribution:\n";
         std::cout << "  Normal: " << std::fixed << std::setprecision(3) << (pi_normal * 100) << "% of time\n";
         std::cout << "  Crash:  " << (pi_crash * 100) << "% of time\n\n";
+        
+        // simulate() with regime switching
+        regime_model.simulate(S0, T, n_steps, n_paths);
 
+        double mean_price_regime   = regime_model.getMeanFinalPrice();
+        double median_price_regime = regime_model.getMedianFinalPrice();
+        auto [ci_low_regime, ci_high_regime] = regime_model.getConfidenceInterval(0.95);
+        double expected_return_regime = (mean_price_regime / S0 - 1) * 100;
 
-        // Simulate with regime-switching
-        std::vector<double> final_prices_regime;
-        final_prices_regime.reserve(n_paths);
-        
-        std::mt19937 gen_regime(42);
-        std::normal_distribution<double> normal_dist(0.0, 1.0);
-        double dt = T / n_steps;
-        
-        for (int path = 0; path < n_paths; path++) {
-            double S = S0;
-            regime_model.reset();  // Start each path in Normal
-            
-            for (int step = 0; step < n_steps; step++) {
-                auto params = regime_model.getCurrentParameters();
-                
-                double Z = normal_dist(gen_regime);
-                double drift = (params.mu - 0.5 * params.sigma * params.sigma) * dt;
-                double diffusion = params.sigma * std::sqrt(dt) * Z;
-                
-                S *= std::exp(drift + diffusion);
-                regime_model.updateRegime();
-            }
-            
-            final_prices_regime.push_back(S);
-        }
-        
-        // Calculate statistics
-        double sum_regime = 0.0;
-        for (double p : final_prices_regime) sum_regime += p;
-        double mean_price_regime = sum_regime / n_paths;
-        
-        std::vector<double> sorted_regime = final_prices_regime;
-        std::sort(sorted_regime.begin(), sorted_regime.end());
-        double median_price_regime = sorted_regime[n_paths / 2];
-        
-        size_t ci_low_idx = static_cast<size_t>(n_paths * 0.025);
-        size_t ci_high_idx = static_cast<size_t>(n_paths * 0.975);
-        double ci_low_regime = sorted_regime[ci_low_idx];
-        double ci_high_regime = sorted_regime[ci_high_idx];
-        
         std::cout << "\n===== Regime-Switching Results =====\n";
         std::cout << "Mean final price   : $" << mean_price_regime << "\n";
         std::cout << "Median final price : $" << median_price_regime << "\n";
         std::cout << "95% CI: [$" << ci_low_regime << ", $" << ci_high_regime << "]\n";
-        double expected_return_regime = (mean_price_regime / S0 - 1) * 100;
         std::cout << "Expected return: " << expected_return_regime << "%\n";
         
         // Print detailed regime statistics
@@ -199,6 +165,7 @@ int main()
         }
         
         out_regime << "path_id,final_price\n";
+        const auto& final_prices_regime = regime_model.getFinalPrices(); // get final price
         for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_regime.size()); ++i) {
             out_regime << i << "," << final_prices_regime[i] << "\n";
         }
