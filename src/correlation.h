@@ -1,6 +1,8 @@
 #ifndef CORRELATION_H
 #define CORRELATION_H
 
+#include "montecarlo_gbm.h"
+
 #include <vector>
 #include <array>
 #include <stdexcept>
@@ -74,6 +76,15 @@ public:
         const std::vector<double>& returns2,
         const std::vector<double>& returns3
     );
+
+    // Take raw prices, handles log-return conversion + trimming internally
+    static std::vector<std::vector<double>> estimateFromPrices(
+        const std::vector<double>& prices1,
+        const std::vector<double>& prices2,
+        const std::vector<double>& prices3);
+
+    // Prints the 3x3 matrix with a label
+    static void printMatrix(const std::vector<std::vector<double>>& corr, size_t n_obs);
     
 private:
     static double mean(const std::vector<double>& data);

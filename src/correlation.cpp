@@ -166,6 +166,38 @@ std::vector<std::vector<double>> CorrelationEstimator::estimateMatrix(
     };
 }
 
+std::vector<std::vector<double>> CorrelationEstimator::estimateFromPrices(
+    const std::vector<double>& prices1,
+    const std::vector<double>& prices2,
+    const std::vector<double>& prices3)
+{                                       // from montecarlo_gbm.h
+    auto returns1 = ParameterEstimator::computeLogReturns(prices1);
+    auto returns2 = ParameterEstimator::computeLogReturns(prices2);
+    auto returns3 = ParameterEstimator::computeLogReturns(prices3);
+
+    // trim all three to shortest, they need have same length
+    size_t n = std::min({returns1.size(), returns2.size(), returns3.size()});
+    returns1.resize(n); returns2.resize(n); returns3.resize(n);
+
+    auto matrix = estimateMatrix(returns1, returns2, returns3);
+    printMatrix(matrix, n);
+    return matrix;
+}
+
+void CorrelationEstimator::printMatrix(
+    const std::vector<std::vector<double>> &corr, size_t n_obs)
+{
+    std::cout << "\nEstimated Correlation Matrix (" << n_obs << " observations):\n";
+    std::cout << std::fixed << std::setprecision(3);
+    const char* labels[] = {"US  ", "INTL", "BOND"};
+    for (int i = 0; i < 3; ++i) {
+        std::cout << "  " << labels[i] << " [ ";
+        for (double v : corr[i]) std::cout << std::setw(7) << v << " ";
+        std::cout << "]\n";
+    }
+    std::cout << std::defaultfloat;
+}
+
 double CorrelationEstimator::mean(const std::vector<double>& data) {
     if (data.empty()) return 0.0;
     double sum = std::accumulate(data.begin(), data.end(), 0.0);

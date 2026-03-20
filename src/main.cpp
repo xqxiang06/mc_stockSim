@@ -2,6 +2,7 @@
 #include "csv_reader.h"
 #include "european_option.h"
 #include "regime_switch.h"
+#include "correlation.h"
 #include "portfolio.h"
 #include <iostream>
 #include <iomanip>
@@ -265,6 +266,11 @@ int main()
         std::cout << "International Stock (VXUS) Parameters:\n";
         std::cout << "  S0 = $" << intl_S0 << ", μ = " << intl_stock_mu << ", σ = " << intl_stock_sigma << "\n";
 
+        // Load US Bond ETF
+        std::vector<double> bond_prices = readLastNPrices("data/BND_DATA.csv", lookback_days);
+
+        double TOTAL_INVESTMENT = 10000.0;
+
         // Manual bond parameters
         VasicekParameters bond_params(
             0.15,   // κ (mean reversion speed)
@@ -278,11 +284,8 @@ int main()
         double intl_stock_weight = 0.20;        
         double bond_weight = 0.20;
 
-        std::vector<std::vector<double>> corr_matrix = {
-            {1.0,  0.75, -0.2},  // US Stock:    corr with self, international, bond
-            {0.75, 1.0,  -0.1},  // Intl Stock:  corr with US, self, bond
-            {-0.2, -0.1,  1.0}   // Bond:        corr with US, international, self
-        };
+        auto corr_matrix = CorrelationEstimator::estimateFromPrices(
+            us_stock_prices, intl_stock_prices, bond_prices); // matrix print after this call
 
         std::cout << "\nPortfolio Configuration:\n";
         std::cout << "  Allocation: " << (us_stock_weight * 100) << "% US stock / " 
@@ -290,8 +293,6 @@ int main()
                   << ((bond_weight) * 100) << "% Bond\n";
         std::cout << "  Bond: " << bond_maturity << "-year maturity\n";
         std::cout << "  Bond rate: " << (bond_params.r0 * 100) << "%\n";
-        
-        double TOTAL_INVESTMENT = 10000.0;
 
         // Create and run portfolio
         Portfolio portfolio(
