@@ -1,7 +1,7 @@
 # Compiler settings
-CXX = /opt/homebrew/bin/g++-15
+CXX = g++
 CXXFLAGS = -std=c++17 -O3 -Wall -Wextra
-LDFLAGS = -L/opt/homebrew/lib/ -ltbb
+LDFLAGS = 
 
 # output dictionary
 BIN = bin

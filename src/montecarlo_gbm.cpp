@@ -103,7 +103,8 @@ void MonteCarloGBM::simulate()
     final_prices.assign(n_paths, 0.0); // pre-allocate
 
 
-    std::for_each(std::execution::par, this->paths.begin(), this->paths.end(), [&](std::vector<double>& path) {
+    // std::for_each(std::execution::par, this->paths.begin(), this->paths.end(), [&](std::vector<double>& path) {
+    for (std::vector<double> &path : paths) {
         // Set initial prices
         path[0] = S0;
         double log_S = std::log(S0); // use incremental form
@@ -142,8 +143,8 @@ void MonteCarloGBM::simulate()
             
             log_S += d_log_S; // smooth + jump
             path[i] = std::exp(log_S);
-        } 
-    });
+        }
+    };
 
     for (int i = 0; i < n_paths; ++i) {
         final_prices[i] = paths[i][n_steps]; // Store last time step for all paths
