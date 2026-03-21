@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <utility>
+#include <string>
 
 /*
 Monte Carlo Simulation for Stock Prices using Geometric Brownian Motion
@@ -45,6 +46,9 @@ class MonteCarloGBM {
     double getMuJ() const { return mu_J; }
     double getSigmaJ() const { return sigma_J; }
     bool hasJumps() const { return lambda > 0.0; }
+
+    // Write results to CSV
+    void writeResultsToCSV(const std::string &filename) const;
 
 private:
     // Model parameters

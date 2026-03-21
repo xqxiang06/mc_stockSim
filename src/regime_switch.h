@@ -142,6 +142,7 @@ public:
     double getMedianFinalPrice() const;
     std::pair<double, double> getConfidenceInterval(double confidence = 0.95) const;
     const std::vector<double>& getFinalPrices() const { return final_prices_regime; }
+    void writeResultsToCSV(const std::string& filename) const;
 };
 
 // Predefined configurations for common scenarios (examples)

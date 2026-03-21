@@ -97,32 +97,8 @@ int main()
         std::cout << "Expected return: " << expected_return_jump << "%\n";
 
         /* Write results to CSV */
-        std::ofstream out_gbm("data/mc_results_gbm.csv");
-        if (!out_gbm.is_open()) {
-            throw std::runtime_error("Cannot write mc_results_gbm.csv");
-        }
-
-        out_gbm << "path_id,final_price\n";
-        const auto& final_prices_gbm = mc_gbm.getFinalPrices(); // get final price
-        for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_gbm.size()); ++i)
-        {
-            out_gbm << i << "," << final_prices_gbm[i] << "\n";
-        }
-        out_gbm.close();
-
-        // Jump Diffusion results
-        std::ofstream out_jump("data/mc_results_jump.csv");
-        if (!out_jump.is_open()) {
-            throw std::runtime_error("Cannot write mc_results_jump.csv");
-        }
-
-        out_jump << "path_id,final_price\n";
-        const auto& final_prices_jump = mc_jump.getFinalPrices();
-        for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_jump.size()); ++i)
-        {
-            out_jump << i << "," << final_prices_jump[i] << "\n";
-        }
-        out_jump.close();
+        mc_gbm.writeResultsToCSV("data/mc_results_gbm.csv");
+        mc_jump.writeResultsToCSV("data/mc_results_jump.csv");
 
         
         // Run Regime-Switching Simulation
@@ -160,17 +136,7 @@ int main()
         regime_model.printStatistics();
         
         // Write results to CSV
-        std::ofstream out_regime("data/mc_results_regime.csv");
-        if (!out_regime.is_open()) {
-            throw std::runtime_error("Cannot write mc_results_regime.csv");
-        }
-        
-        out_regime << "path_id,final_price\n";
-        const auto& final_prices_regime = regime_model.getFinalPrices(); // get final price
-        for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_regime.size()); ++i) {
-            out_regime << i << "," << final_prices_regime[i] << "\n";
-        }
-        out_regime.close();
+        regime_model.writeResultsToCSV("data/mc_results_regime.csv");
 
         
         // Summary Statstics

@@ -266,6 +266,22 @@ std::pair<double, double> RegimeSwitching::getConfidenceInterval(double confiden
              MonteCarloGBM::percentile(final_prices_regime, upper_p) };
 }
 
+// Save several sample simulated final prices to file
+void RegimeSwitching::writeResultsToCSV(const std::string& filename) const {
+    std::ofstream out(filename);
+    if (!out.is_open()) {
+        throw std::runtime_error("Cannot write to " + filename);
+    }
+    
+    out << "path_id,final_price\n";
+    const auto &final_prices_regime = getFinalPrices(); // get final prices
+    for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_regime.size()); ++i)
+    {
+        out << i << "," << final_prices_regime[i] << "\n";
+    }
+    out.close();
+}
+
 // -----------------------------Implementation of RegimeConfig::calibrateFromData-----------------------------------------
 
 RegimeConfig RegimeConfig::calibrateFromData(

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <iostream>
+#include <fstream>
 // For parallel
 #include <execution>
 #include <thread>
@@ -218,6 +219,22 @@ double MonteCarloGBM::percentile(const std::vector<double> &data, double p)
     // Linear interpolation: Q(p) = (1-w) * Xlower + w * Xupper
     double weight = index - lower_idx;
     return sorted_data[lower_idx] * (1 - weight) + sorted_data[upper_idx] * weight;
+}
+
+// Save several sample simulated final prices to file
+void MonteCarloGBM::writeResultsToCSV(const std::string &filename) const {
+    std::ofstream out(filename);
+    if (!out.is_open()) {
+        throw std::runtime_error("Cannot write to " + filename);
+    }
+    
+    out << "path_id,final_price\n";
+    const auto &final_prices_gbm = getFinalPrices(); // get final prices
+    for (size_t i = 0; i < std::min(static_cast<std::size_t>(1000), final_prices_gbm.size()); ++i)
+    {
+        out << i << "," << final_prices_gbm[i] << "\n";
+    }
+    out.close();
 }
 
 //--------------------------------------------------Class-ParameterEstimator--------------------------------------------
