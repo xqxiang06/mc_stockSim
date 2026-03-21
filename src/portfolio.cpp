@@ -41,6 +41,7 @@ Portfolio::Portfolio(
 }
 
 void Portfolio::simulate() {
+    std::cout << std::fixed << std::setprecision(2);
     std::cout << "\n===== Portfolio Simulation Parameters =====\n";
     std::cout << "  Total investment: $" << total_investment << "\n";
     std::cout << "  Allocation: \n"; 
@@ -103,6 +104,11 @@ void Portfolio::simulate() {
     double us_stock_drift = (us_stock_mu - 0.5 * us_stock_sigma * us_stock_sigma) * dt;
     double intl_stock_drift = (intl_stock_mu - 0.5 * intl_stock_sigma * intl_stock_sigma) * dt;
 
+    // sample path to record intermediate values (for python plotting)
+    const int sample_every = 1000;
+    const int n_sampled = n_paths / sample_every;
+    sampled_paths.assign(n_sampled, std::vector<double>(n_steps + 1)); // [pathId][step]
+
     for (int path = 0; path < n_paths; ++path) {
         // Generate correlated normals for this path
         std::vector<double> us_stock_normals(n_steps);
@@ -123,30 +129,44 @@ void Portfolio::simulate() {
             bond_normals[step] = W3;
         }
         
-        // Simulate US stock (GBM)
-        double S_us = us_stock_S0;
-        for (int step = 0; step < n_steps; ++step) {
-            double dW = us_stock_normals[step] * sqrt_dt;
-            S_us *= std::exp(us_stock_drift + us_stock_sigma * dW);
-        }
-        final_us_stock_prices[path] = S_us;
-
-        // Simulate International stock (GBM)
-        double S_intl = intl_stock_S0;
-        for (int step = 0; step < n_steps; ++step) {
-            double dW = intl_stock_normals[step] * sqrt_dt;
-            S_intl *= std::exp(intl_stock_drift + intl_stock_sigma * dW);
-        }
-        final_intl_stock_prices[path] = S_intl;
-        
-        // Simulate bond (Vasicek) and scale
+        // Simulate bond (Vasicek) upfront (gives all steps at once)
         VasicekBond bond(bond_params, T, n_steps, bond_maturity);
-        auto bond_path = bond.simulatePath(&bond_normals);
-        double bond_price_T = bond_path.back() * bond_scale;  // Scale to $117 basis
-        final_bond_prices[path] = bond_price_T;
+        auto bond_path = bond.simulatePath(&bond_normals); // size = n_steps + 1
+
+        bool is_sampled = (path % sample_every == 0);
+        int  sample_idx = path / sample_every;
+
+        // Step 0: initial values
+        if (is_sampled)
+            sampled_paths[sample_idx][0] = n_us_stock * us_stock_S0
+                                         + n_intl_stock * intl_stock_S0
+                                         + n_bond * bond_path[0] * bond_scale;
+
+        // Simulate stocks step by step
+        // (merged into one loop for intermediate recording)
+        double S_us = us_stock_S0;
+        double S_intl = intl_stock_S0;
+        
+        for (int step = 0; step < n_steps; ++step) {
+            // double dW = us_stock_normals[step] * sqrt_dt;
+            S_us *= std::exp(us_stock_drift + us_stock_sigma
+                                            * us_stock_normals[step] * sqrt_dt);
+            S_intl *= std::exp(intl_stock_drift + intl_stock_sigma
+                                                * intl_stock_normals[step] * sqrt_dt);
+            
+            if (is_sampled) {
+                double bond_price = bond_path[step + 1] * bond_scale;
+                sampled_paths[sample_idx][step + 1] =
+                    n_us_stock * S_us + n_intl_stock * S_intl + n_bond * bond_price;
+            }
+        }
         
         // Portfolio value
-        final_portfolio_values[path] = n_us_stock * S_us + n_intl_stock * S_intl + n_bond * bond_price_T;
+        final_us_stock_prices[path]   = S_us;
+        final_intl_stock_prices[path] = S_intl;
+        final_bond_prices[path]       = bond_path.back() * bond_scale;
+        final_portfolio_values[path]  = n_us_stock * S_us + n_intl_stock * S_intl
+                                        + n_bond * final_bond_prices[path];
     }
 }
 
@@ -246,6 +266,24 @@ void Portfolio::writeResultsToCSV(const std::string& filename) const {
     }
     
     out.close();
+
+    // Derive paths to a new file "data/portfolio_paths.csv"
+    std::string paths_file = filename;
+    size_t pos = paths_file.rfind(".csv");
+    if (pos != std::string::npos) paths_file.replace(pos, 4, "_paths.csv");
+    else paths_file += "_paths.csv";
+
+    std::ofstream pout(paths_file);
+    if (!pout.is_open())
+        throw std::runtime_error("Cannot write to " + paths_file);
+
+    pout << "path_id,step,portfolio_value\n";
+    for (size_t p = 0; p < sampled_paths.size(); ++p) {
+        for (size_t s = 0; s < sampled_paths[p].size(); ++s) {
+            pout << (p * 1000) << "," << s << "," << sampled_paths[p][s] << "\n";
+        }
+    }
+    pout.close();
 }
 
 double Portfolio::percentile(const std::vector<double>& data, double p) const {

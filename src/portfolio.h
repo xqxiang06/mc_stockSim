@@ -89,7 +89,8 @@ private:
     std::vector<double> final_us_stock_prices;
     std::vector<double> final_intl_stock_prices;
     std::vector<double> final_bond_prices;
-    
+    std::vector<std::vector<double>> sampled_paths; // [sample_idx][step]
+
     // Helper for percentile calculation
     double percentile(const std::vector<double>& data, double p) const;
 };
