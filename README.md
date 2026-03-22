@@ -33,8 +33,8 @@ Models the market as alternating between two latent states — **Normal** and **
 
 ---
 
-### 4. Portfolio Simulation (60/40 Stock + Bond)
-Combines a stock position (GBM) with a bond position priced using the **Vasicek interest rate model**, allocated at a configurable stock/bond split (default 60/40).
+### 4. Three-Fund Portfolio Simulation (US Stock + Intl Stock + Bond)
+Combines a stock position (GBM) with a bond position priced using the **Vasicek interest rate model**, allocated at a configurable stock/bond split (default 60/20/20).
 
 ```
 Bond price: P(t,T) = A(t,T) · e^(−B(t,T)·r_t)
@@ -44,9 +44,9 @@ r_t follows: dr = κ(θ − r) dt + σ_r dW
 
 ## Simulation Results
 
-![Simulation of Final Price Distributions](pic/StockModelCompar.png)
+![Simulation of Three-Fund Portfolio FanChart](pic/fanChart.png)
 
-*Figure 1: Final stock price distributions across models from simulation*
+*Figure 1: Portfolio value trend looking forward to one year from now*
    
 ![Real NVIDIA vs Monte Carlo GBM](pic/simulate_path.png)
    
@@ -133,11 +133,10 @@ All user-facing parameters live at the top of `main()` in `main.cpp`:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `csv_file` | `data/nvda_stock.csv` | Path to historical price data |
-| `lookback_days` | 126 | Trading days used for GBM/jump calibration |
-| `regime_lookback_days` | 252 | Trading days used for regime calibration |
+| `lookback_days` | 252 | Trading days used for GBM/jump calibration |
 | `n_paths` | 1,000,000 | Number of Monte Carlo paths |
-| `n_steps` | 126 | Time steps per path (daily for 6 months) |
-| `T` | 0.5 | Simulation horizon in years |
+| `n_steps` | 252 | Time steps per path (daily for 6 months) |
+| `T` | 1.0 | Simulation horizon in years |
 | `jump_threshold` | 2.5 | Z-score cutoff for classifying jumps |
 | `r` | 0.045 | Risk-free rate for option pricing |
-| `stock_weight` | 0.6 | Portfolio stock allocation |
+| `stock_weight` | 0.8 | Portfolio stock allocation |
