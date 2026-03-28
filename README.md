@@ -48,9 +48,9 @@ r_t follows: dr = κ(θ − r) dt + σ_r dW
 
 *Figure 1: Portfolio value trend looking forward to one year from now*
    
-![Real NVIDIA vs Monte Carlo GBM](pic/simulate_path.png)
+![Real AAPL vs Monte Carlo GBM](pic/stockForecast.png)
    
-*Figure 2: Comparison of real NVIDIA stock prices (past 6 months) vs Monte Carlo GBM simulation*
+*Figure 2: Comparison of historical AAPL stock prices (past year) vs Monte Carlo GBM simulation*
 
 ---
 
@@ -122,6 +122,20 @@ Override the compiler if needed:
 
 ```bash
 make CXX=clang++
+```
+
+---
+
+## Visualisation
+
+After running the C++ simulation, generate charts from the exported CSV data:
+
+```bash
+# Fan chart — three-fund portfolio value trend
+python pic/plot3.py
+
+# Single stock forecast — historical vs GBM simulation
+python pic/forecastStock.py
 ```
 
 ---

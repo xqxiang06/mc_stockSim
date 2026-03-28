@@ -235,6 +235,24 @@ void MonteCarloGBM::writeResultsToCSV(const std::string &filename) const {
         out << i << "," << final_prices_gbm[i] << "\n";
     }
     out.close();
+
+     // Derive paths filename
+    std::string paths_file = filename;
+    size_t pos = paths_file.rfind(".csv");
+    if (pos != std::string::npos) paths_file.replace(pos, 4, "_paths.csv");
+    else paths_file += "_paths.csv";
+
+    std::ofstream pout(paths_file);
+    if (!pout.is_open())
+        throw std::runtime_error("Cannot write to " + paths_file);
+
+    pout << "path_id,step,price\n";
+    const int sample_every = 1000; // Take one sample path for every 1000
+    for (int p = 0; p < n_paths; p += sample_every) {
+        for (int s = 0; s <= n_steps; ++s)
+            pout << p << "," << s << "," << paths[p][s] << "\n";
+    }
+    pout.close();
 }
 
 //--------------------------------------------------Class-ParameterEstimator--------------------------------------------
