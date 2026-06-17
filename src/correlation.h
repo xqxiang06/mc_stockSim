@@ -62,6 +62,13 @@ private:
 /**
  * Estimate correlation from historical log returns of two assets
  */
+struct EstimationResult {
+    // correlation matrix (for Cholesky)
+    std::vector<std::vector<double>> corr;
+    // covariance matrix (optimal weights)
+    std::vector<std::vector<double>> cov;
+};
+
 class CorrelationEstimator {
 public:
     /**
@@ -71,20 +78,24 @@ public:
      * @param returns3 Log returns of asset 3 (Bonds)
      * @return Symmetric 3x3 correlation matrix with 1s on diagonal
      */
-    static std::vector<std::vector<double>> estimateMatrix(
+    static EstimationResult estimateMatrix(
         const std::vector<double>& returns1,
         const std::vector<double>& returns2,
         const std::vector<double>& returns3
     );
 
     // Take raw prices, handles log-return conversion + trimming internally
-    static std::vector<std::vector<double>> estimateFromPrices(
+    static EstimationResult estimateFromPrices(
         const std::vector<double>& prices1,
         const std::vector<double>& prices2,
         const std::vector<double>& prices3);
 
-    // Prints the 3x3 matrix with a label
-    static void printMatrix(const std::vector<std::vector<double>>& corr, size_t n_obs);
+    // Prints 3x3 matrices with a label
+    static void printMatrix(
+        const std::vector<std::vector<double>>& corr,
+        const std::vector<std::vector<double>>& cov,
+        size_t n_obs
+    );
     
 private:
     static double mean(const std::vector<double>& data);

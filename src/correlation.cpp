@@ -106,7 +106,7 @@ void CorrelationMatrix::printCholeskyFactors() const {
 
 // ==================== CorrelationEstimator Implementation ====================
 
-std::vector<std::vector<double>> CorrelationEstimator::estimateMatrix(
+EstimationResult CorrelationEstimator::estimateMatrix(
     const std::vector<double>& returns1,
     const std::vector<double>& returns2,
     const std::vector<double>& returns3)
@@ -149,7 +149,19 @@ std::vector<std::vector<double>> CorrelationEstimator::estimateMatrix(
     c00 *= inv;  c11 *= inv;  c22 *= inv;
     c01 *= inv;  c02 *= inv;  c12 *= inv;
 
-    // Step 3: normalize Sigma -> R using rho_ij = Cov(i,j) / (sig_i * sig_j)
+    // Covariance Matrix for python to optimize portfilio weights
+    std::vector<std::vector<double>> cov = {
+        { c00, c01, c02 },
+        { c01, c11, c12 },
+        { c02, c12, c22 }
+    }; // unscaled / per day
+
+    // Annualized
+    for (auto &row : cov)
+        for (auto &val : row)
+            val *= 252.0;
+
+    // CorrMatrix: normalize Sigma -> R using rho_ij = Cov(i,j) / (sig_i * sig_j)
     double sig0 = std::sqrt(c00);
     double sig1 = std::sqrt(c11);
     double sig2 = std::sqrt(c22);
@@ -159,14 +171,16 @@ std::vector<std::vector<double>> CorrelationEstimator::estimateMatrix(
         return std::max(-1.0, std::min(1.0, cov / (si * sj)));
     };
 
-    return {
+    std::vector<std::vector<double>> corr = {
         { 1.0,                        safeCorr(c01, sig0, sig1), safeCorr(c02, sig0, sig2) },
         { safeCorr(c01, sig0, sig1),  1.0,                       safeCorr(c12, sig1, sig2) },
         { safeCorr(c02, sig0, sig2),  safeCorr(c12, sig1, sig2), 1.0                       }
     };
+
+    return { corr, cov };
 }
 
-std::vector<std::vector<double>> CorrelationEstimator::estimateFromPrices(
+EstimationResult CorrelationEstimator::estimateFromPrices(
     const std::vector<double>& prices1,
     const std::vector<double>& prices2,
     const std::vector<double>& prices3)
@@ -179,14 +193,17 @@ std::vector<std::vector<double>> CorrelationEstimator::estimateFromPrices(
     size_t n = std::min({returns1.size(), returns2.size(), returns3.size()});
     returns1.resize(n); returns2.resize(n); returns3.resize(n);
 
-    auto matrix = estimateMatrix(returns1, returns2, returns3);
-    printMatrix(matrix, n);
-    return matrix;
+    auto result = estimateMatrix(returns1, returns2, returns3);
+    printMatrix(result.corr, result.cov, n);
+    return result;
 }
 
 void CorrelationEstimator::printMatrix(
-    const std::vector<std::vector<double>> &corr, size_t n_obs)
+    const std::vector<std::vector<double>> &corr,
+    const std::vector<std::vector<double>>& cov,
+    size_t n_obs)
 {
+    // correlation mareix
     std::cout << "\nEstimated Correlation Matrix (" << n_obs << " observations):\n";
     std::cout << std::fixed << std::setprecision(3);
     const char* labels[] = {"US  ", "INTL", "BOND"};
@@ -195,6 +212,17 @@ void CorrelationEstimator::printMatrix(
         for (double v : corr[i]) std::cout << std::setw(7) << v << " ";
         std::cout << "]\n";
     }
+
+    // covariance matrix (new)
+    std::cout << "\nCovariance Matrix (annualized):\n";
+    const char* cov_labels[] = {"VOO ", "VXUS", "BND "};
+    for (int i = 0; i < 3; ++i) {
+        std::cout << "  " << cov_labels[i] << " [ ";
+        for (double v : cov[i])
+            std::cout << std::fixed << std::setprecision(6) << std::setw(10) << v << " ";
+        std::cout << "]\n";
+    }
+
     std::cout << std::defaultfloat;
 }
 
