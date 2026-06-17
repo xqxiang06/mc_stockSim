@@ -4,6 +4,7 @@
 #include "regime_switch.h"
 #include "correlation.h"
 #include "portfolio.h"
+#include "Optimizer.h"
 #include <iostream>
 #include <iomanip>
 #include <fstream>
@@ -246,12 +247,27 @@ int main()
         );
         
         double bond_maturity = 10.0;
-        double us_stock_weight = 0.60;  // Three-fund allocations
-        double intl_stock_weight = 0.20;        
-        double bond_weight = 0.20;
 
-        auto corr_matrix = CorrelationEstimator::estimateFromPrices(
+        auto est = CorrelationEstimator::estimateFromPrices(
             us_stock_prices, intl_stock_prices, bond_prices); // matrix print after this call
+        
+        auto corr_matrix = est.corr; // still used by Portfolio and Cholesky
+        auto cov_matrix = est.cov;   // new: print for python
+
+        // Sharpe Opitimization
+        std::array<double, 3> mu_arr = {
+            us_stock_mu,
+            intl_stock_mu,
+            bond_params.theta // long-term mean rate as bond return
+        };
+
+        SharpeOptimizer optimizer(mu_arr, cov_matrix, r);
+        auto best = optimizer.maxSharpe();
+        optimizer.printResult(best);
+
+        double us_stock_weight   = best.weights[0];
+        double intl_stock_weight = best.weights[1];
+        double bond_weight       = best.weights[2];
 
         std::cout << "\nPortfolio Configuration:\n";
         std::cout << "  Allocation: " << (us_stock_weight * 100) << "% US stock / " 
