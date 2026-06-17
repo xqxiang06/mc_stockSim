@@ -1,7 +1,11 @@
 # Compiler settings
 CXX = g++
-CXXFLAGS = -std=c++17 -O3 -Wall -Wextra
-LDFLAGS = 
+CXXFLAGS = -std=c++17 -O3 -Wall -Wextra \
+		   -I/opt/anaconda3/lib/python3.11/site-packages/pybind11/include \
+           -I/opt/anaconda3/include/python3.11
+LDFLAGS = -L/opt/anaconda3/lib \
+          -lpython3.11 -ldl -framework CoreFoundation \
+		  -Wl,-rpath,/opt/anaconda3/lib
 
 # output dictionary
 BIN = bin
@@ -13,7 +17,8 @@ TARGET = monte_carlo_sim
 # Source files (auto-detect from src/)
 SOURCES = $(wildcard src/*.cpp)
 OBJECTS = $(SOURCES:.cpp=.o)
-HEADERS = montecarlo_gbm.h csv_reader.h european_option.h regime_switch.h portfolio.h
+HEADERS = montecarlo_gbm.h csv_reader.h european_option.h regime_switch.h \
+		  portfolio.h Optimizer.h
 
 # Default target
 all: bin data app
