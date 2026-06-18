@@ -1,9 +1,10 @@
 import numpy as np
 import scipy.optimize as sco
 
-def max_sharpe(mu, cov, rf):
+def optimizer(mu, cov, rf, mode='max_sharpe'):
     """
-    Find portfolio weights that maximize the Sharpe ratio.
+    Find portfolio weights that 1)maximize the Sharpe ratio.
+                                2)minimize volatility
     
     Parameters
         mu  : list of 3 floats  — annualized mean returns
@@ -45,7 +46,10 @@ def max_sharpe(mu, cov, rf):
     # start guessing: Equal weights vector
     eweights = np.array(noa * [1.0 / noa,])
 
-    opts = sco.minimize(neg_sharpe, eweights,
+    # switch the mode: max_sharpe OR min_vol
+    objective = neg_sharpe if mode == 'max_sharpe' else port_vol
+
+    opts = sco.minimize(objective, eweights,
                         method='SLSQP', # Sequential Least Squares Programming
                         bounds=bnds,
                         constraints=cons)

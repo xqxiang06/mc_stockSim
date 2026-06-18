@@ -11,14 +11,11 @@ SharpeOptimizer::SharpeOptimizer(
     const std::array<double, 3>& mu,
     const std::vector<std::vector<double>>& cov,
     double rf)
-    : mu(mu), cov(cov), rf(rf) {
+    : mu(mu), cov(cov), rf(rf), guard{} {
+                             // embedded Python interpreter
+    }                        // initialize guard in constructor
 
-    }
-
-SharpeResult SharpeOptimizer::maxSharpe() const {
-    // start the embedded Python interpreter
-    py::scoped_interpreter guard{};
-
+SharpeResult SharpeOptimizer::runOptimizer(const std::string &mode) const {
     // add src/ to sys.path so Python finds optimize_sharpe.py
     py::module_ sys = py::module_::import("sys");
     sys.attr("path").attr("insert")(0, ".");      // project root
@@ -30,8 +27,8 @@ SharpeResult SharpeOptimizer::maxSharpe() const {
     // convert std::array to std::vector — pybind11 maps vector → Python list
     std::vector<double> mu_vec(mu.begin(), mu.end());
 
-    // call max_sharpe(mu, cov, rf) — cov is already vector<vector<double>>
-    py::dict result = opt.attr("max_sharpe")(mu_vec, cov, rf);
+    // call python optomizer()
+    py::dict result = opt.attr("optimizer")(mu_vec, cov, rf, mode);
 
     // read results back from Python dict into C++ struct
     std::vector<double> w = result["weights"].cast<std::vector<double>>();
@@ -45,10 +42,20 @@ SharpeResult SharpeOptimizer::maxSharpe() const {
     return r;
 }
 
-void SharpeOptimizer::printResult(const SharpeResult &r) const{
+// Two modes: whether max Sharpe or min vol
+SharpeResult SharpeOptimizer::maxSharpe() const{
+    return runOptimizer("max_sharpe");
+}
+
+SharpeResult SharpeOptimizer::minVol() const {
+    return runOptimizer("min_vol");
+}
+
+void SharpeOptimizer::printResult(const SharpeResult &r,
+                                  const std::string &label) const{
     const char* labels[] = {"VOO", "VXUS", "BND"};
     std::cout << std::fixed << std::setprecision(4);
-    std::cout << "\n=== Max Sharpe Portfolio (scipy SLSQP) ===\n";
+    std::cout << "\n=== " << label << "===\n";
 
     for (int i = 0; i < 3; ++i)
         std::cout << " " << labels[i] << ": "

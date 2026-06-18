@@ -262,12 +262,18 @@ int main()
         };
 
         SharpeOptimizer optimizer(mu_arr, cov_matrix, r);
-        auto best = optimizer.maxSharpe();
-        optimizer.printResult(best);
-
-        double us_stock_weight   = best.weights[0];
-        double intl_stock_weight = best.weights[1];
-        double bond_weight       = best.weights[2];
+        auto best_sharpe = optimizer.maxSharpe();
+        optimizer.printResult(best_sharpe,
+                              "Max Sharpe Portfolio (scipy SLSQP)");
+        /*
+        auto best_minvol = optimizer.minVol();
+        optimizer.printResult(best_minvol,
+                              "Min Volatility Portfolio (scipy SLSQP)"); */
+        
+        // use either weights combination for simulation
+        double us_stock_weight   = best_sharpe.weights[0];
+        double intl_stock_weight = best_sharpe.weights[1];
+        double bond_weight       = best_sharpe.weights[2];
 
         std::cout << "\nPortfolio Configuration:\n";
         std::cout << "  Allocation: " << (us_stock_weight * 100) << "% US stock / " 
